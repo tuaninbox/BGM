@@ -39,7 +39,15 @@
   <!-- Navigation Menu (tight spacing under title) -->
   <nav class="mt-2">
   <ul class="flex space-x-6 text-sm font-medium">
-
+  <!-- Approver Dashboard (approver + requester_approver) -->
+    {% if current_user.role in ["approver", "requester_approver"] %}
+      <li>
+        <a href="/ui/approval/dashboard"
+           class="text-gray-700 px-3 py-1 rounded-md transition hover:bg-blue-600 hover:text-white">
+          Dashboard
+        </a>
+      </li>
+    {% endif %}
     <!-- Devices -->
     <li>
       <a href="/ui/devices"
@@ -48,7 +56,19 @@
       </a>
     </li>
 
-    <!-- Accounts -->
+
+
+    <!-- Request Dashboard (requester + requester_approver) -->
+    {% if current_user.role in ["requester", "requester_approver", "approver"] %}
+      <li>
+        <a href="/ui/requests"
+           class="text-gray-700 px-3 py-1 rounded-md transition hover:bg-blue-600 hover:text-white">
+          Requests
+        </a>
+      </li>
+    {% endif %}
+
+        <!-- Accounts -->
     {% if current_user.role == "admin" %}
       <li>
         <a href="/ui/accounts"
@@ -64,28 +84,7 @@
         </a>
       </li>
     {% endif %}
-
-    <!-- Request Dashboard (requester + requester_approver) -->
-    {% if current_user.role in ["requester", "requester_approver", "approver"] %}
-      <li>
-        <a href="/ui/requests"
-           class="text-gray-700 px-3 py-1 rounded-md transition hover:bg-blue-600 hover:text-white">
-          Requests
-        </a>
-      </li>
-    {% endif %}
-
-    <!-- Approver Dashboard (approver + requester_approver) -->
-    {% if current_user.role in ["approver", "requester_approver"] %}
-      <li>
-        <a href="/ui/approver/dashboard"
-           class="text-gray-700 px-3 py-1 rounded-md transition hover:bg-blue-600 hover:text-white">
-          Approvals
-        </a>
-      </li>
-    {% endif %}
-
-    <!-- Audit Logs (admin only) -->
+   <!-- Audit Logs (admin only) -->
     {% if current_user.role == "admin" %}
       <li>
         <a href="/ui/logs"

@@ -51,33 +51,89 @@
               {% endif %}
             </td>
 
-      <td class="px-3 py-2">
-      {% if has_approver %}
-        {% if current_user.role in ["requester", "requester_approver"] %}
-        <button
-          class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-          hx-get="/ui/requests/create-modal/{{ d.name }}"
-          hx-target="#modal"
-          hx-swap="innerHTML">
-          Request Access
-        </button>
+     <td class="px-3 py-2">
+
+      {% if d.request and d.request.status in ["pending", "approved"] %}
+
+        {# --------------------------------------------------------- #}
+        {# ACTIVE REQUEST FOUND                                      #}
+        {# --------------------------------------------------------- #}
+
+        {% if d.request.status == "pending" %}
+          <span class="text-yellow-700 bg-yellow-100 px-2 py-1 rounded text-xs">
+            Pending Approval
+          </span>
+
+          <p class="text-xs text-gray-600 mb-2">
+            Requested by {{ d.request.requester_username }}<br>
+            Active until {{ d.request.end_time }}
+          </p>
+
+        {% elif d.request.status == "approved" %}
+          <span class="text-green-700 bg-green-100 px-2 py-1 rounded text-xs">
+            Approved
+          </span>
+
+          <p class="text-xs text-gray-600 mb-2">
+            Requested by {{ d.request.requester_username }}<br>
+            Active until {{ d.request.end_time }}
+          </p>
+
+          <button
+            class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 mr-2"
+            hx-post="/ui/requests/{{ d.request.id }}/copy-password"
+            hx-trigger="click"
+            hx-target="#toast"
+            hx-swap="innerHTML">
+            Copy Password
+          </button>
+
+          <button
+            class="bg-gray-700 text-white px-3 py-1 rounded hover:bg-gray-800"
+            hx-get="/ui/requests/{{ d.request.id }}/show-password"
+            hx-target="#modal"
+            hx-swap="innerHTML">
+            Show Password
+          </button>
+
+        {% endif %}
+
+      {% else %}
+
+        {# --------------------------------------------------------- #}
+        {# NO ACTIVE REQUEST — NORMAL REQUEST ACCESS BUTTON          #}
+        {# --------------------------------------------------------- #}
+
+        {% if has_approver %}
+          {% if current_user.role in ["requester", "requester_approver"] %}
+            <button
+              class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+              hx-get="/ui/requests/create-modal/{{ d.name }}"
+              hx-target="#modal"
+              hx-swap="innerHTML">
+              Request Access
+            </button>
+          {% else %}
+            <button
+              class="bg-gray-400 text-white px-3 py-1 rounded cursor-not-allowed"
+              disabled>
+              Request Access
+            </button>
+            <p class="text-xs text-red-600 mt-1">You do not have permission</p>
+          {% endif %}
         {% else %}
           <button
             class="bg-gray-400 text-white px-3 py-1 rounded cursor-not-allowed"
             disabled>
             Request Access
           </button>
-          <p class="text-xs text-red-600 mt-1">You do not have permission</p>
+          <p class="text-xs text-red-600 mt-1">No approver available</p>
         {% endif %}
-      {% else %}
-        <button
-          class="bg-gray-400 text-white px-3 py-1 rounded cursor-not-allowed"
-          disabled>
-          Request Access
-        </button>
-        <p class="text-xs text-red-600 mt-1">No approver available</p>
+
       {% endif %}
+
     </td>
+
           </tr>
           {% endfor %}
         </tbody>

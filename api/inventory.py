@@ -7,8 +7,10 @@ from deps.auth import get_current_user
 from core.logging import log_event
 from core.device_loader import load_devices_from_file, load_devices
 from models.account import Account
+from models.request import BreakglassRequest
 from core.permissions import has_permission
 from core.audit_logger import log_action
+from datetime import datetime, timezone
 from core.vault import VaultClient
 # from models.device import Device
 # from schemas.device import DeviceRead, DeviceCreate, DeviceImportItem
@@ -66,11 +68,38 @@ async def list_devices(
 
             for dev in devices:
                 name = dev["name"]
-                bg = bg_lookup.get(name)
+                bg = bg_lookup.get(name)           
+                username= bg["username"] if bg else None
+
+                now = datetime.now(timezone.utc).isoformat()
+                # ---------------------------------------------------------
+                # REQUEST LOOKUP FOR CURRENT USER (ONLY NON-EXPIRED)
+                # ---------------------------------------------------------
+                req_stmt = select(BreakglassRequest).where(
+                    BreakglassRequest.device_name == name,
+                    BreakglassRequest.account_username == username,
+                    BreakglassRequest.requester_id == current_user.id,
+                    BreakglassRequest.end_time >= now   # <-- NOT EXPIRED
+                ).order_by(BreakglassRequest.id.desc())
+
+                req_result = await db.execute(req_stmt)
+                req_obj = req_result.scalars().first()
+
+                if req_obj:
+                    request_info = {
+                        "id": req_obj.id,
+                        "status": req_obj.status,
+                        "start_time": req_obj.start_time,
+                        "end_time": req_obj.end_time,
+                        "requester_username": req_obj.requester_username,
+                    }
+                else:
+                    request_info = None
 
                 merged_devices.append({
                     **dev,
-                    "username": bg["username"] if bg else None
+                    "username": username,
+                    "request": request_info
                 })
         else:
             return {

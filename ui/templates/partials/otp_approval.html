@@ -3,9 +3,14 @@
 
     <h2 class="text-xl font-bold mb-3">OTP Approval</h2>
 
-    <form hx-post="/api/requests/{{ req.id }}/approve"
+    <form hx-post="/ui/requests/{{ req.id }}/approve"
           hx-target="#modal"
           hx-swap="innerHTML">
+      <select name="approver_name" class="border rounded px-2 py-1">
+        {% for a in approver_list %}
+          <option value="{{ a.username}}">{{ a.username }} ({{ a.role }})</option>
+        {% endfor %}
+      </select>
 
       <label class="block font-semibold mt-2">OTP Code</label>
       <input type="text" name="otp_code"

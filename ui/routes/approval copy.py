@@ -21,8 +21,8 @@ router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="ui/templates")
 templates.env.cache.clear()
 
-@router.get("/approver/dashboard", response_class=HTMLResponse)
-async def approver_dashboard(
+@router.get("/approval/dashboard", response_class=HTMLResponse)
+async def approval_dashboard(
     request: Request,
     status: str | None = None,
     device: str | None = None,
@@ -61,7 +61,7 @@ async def approver_dashboard(
     pending, approved, rejected, expired = stats_result.one()
 
     return templates.TemplateResponse(
-        "approval.html",
+        "dashboard.html",
         {
             "request": request,
             "current_user": current_user,

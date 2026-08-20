@@ -2,8 +2,13 @@
   <div class="bg-white p-6 rounded shadow-lg w-96">
 
     <h2 class="text-xl font-bold mb-3">Request Breakglass Access</h2>
+      {% if error %}
+      <div class="mb-4 p-3 rounded bg-red-100 text-red-700 border border-red-300">
+        {{ error }}
+      </div>
+      {% endif %}
 
-    <form hx-post="/api/requests/create"
+    <form hx-post="/ui/requests/create"
           hx-target="#modal"
           hx-swap="innerHTML">
       <input type="hidden" name="device_name" value="{{ device_name }}">

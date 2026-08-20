@@ -3,12 +3,12 @@
 
     <h2 class="text-xl font-bold mb-3">Reject Request</h2>
 
-    <form hx-post="/api/requests/{{ req.id }}/reject"
+    <form hx-post="/ui/requests/{{ req.id }}/reject"
           hx-target="#modal"
           hx-swap="innerHTML">
 
       <label class="block font-semibold mt-2">Rejection Reason</label>
-      <textarea name="approve_reason"
+      <textarea name="reject_reason"
                 class="w-full border rounded p-2"
                 required></textarea>
 

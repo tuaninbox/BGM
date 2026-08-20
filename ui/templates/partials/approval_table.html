@@ -1,0 +1,97 @@
+<div id="approver-table">
+  <table class="min-w-full bg-white border rounded shadow text-sm">
+    <thead class="bg-gray-100 border-b">
+      <tr>
+        <th class="px-3 py-2 text-left">Device</th>
+        <th class="px-3 py-2 text-left">Account</th>
+
+        <!-- Requester -->
+        <th class="px-3 py-2 text-left">Requester</th>
+
+        <!-- Approver -->
+        <th class="px-3 py-2 text-left">Approver</th>
+
+        <th class="px-3 py-2 text-left">Start</th>
+        <th class="px-3 py-2 text-left">End</th>
+        <th class="px-3 py-2 text-left">Status</th>
+
+        <!-- Approval Details stays -->
+        <th class="px-3 py-2 text-left">Approval Details</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {% for r in requests %}
+      <tr class="border-b hover:bg-gray-50">
+
+        <td class="px-3 py-2">{{ r.device_name }}</td>
+        <td class="px-3 py-2">{{ r.account_username }}</td>
+
+        <!-- ⭐ Requester column -->
+        <td class="px-3 py-2">
+          <div><strong>{{ r.requester }}</strong></div>
+          <div class="mt-1 text-xs text-gray-700">
+            <strong>Reason:</strong>
+            <p>{{ r.request_reason }}</p>
+          </div>
+        </td>
+
+        <!-- ⭐ Approver column -->
+        <td class="px-3 py-2">
+          {% if r.approver %}
+            <div><strong>{{ r.approver }}</strong></div>
+
+            {% if r.approve_reason %}
+            <div class="mt-1 text-xs text-gray-700">
+              <strong>Reason:</strong>
+              <p>{{ r.approve_reason }}</p>
+            </div>
+            {% endif %}
+
+          {% else %}
+            <span class="text-xs text-gray-500">Not yet approved</span>
+          {% endif %}
+        </td>
+
+        <td class="px-3 py-2">{{ r.start_time }}</td>
+        <td class="px-3 py-2">{{ r.end_time }}</td>
+
+        <td class="px-3 py-2">
+          {% if r.status == "pending" %}
+            <span class="px-2 py-1 bg-yellow-200 text-yellow-800 rounded">Pending</span>
+          {% elif r.status == "approved" %}
+            <span class="px-2 py-1 bg-green-200 text-green-800 rounded">Approved</span>
+          {% elif r.status == "rejected" %}
+            <span class="px-2 py-1 bg-red-200 text-red-800 rounded">Rejected</span>
+          {% elif r.status == "expired" %}
+            <span class="px-2 py-1 bg-gray-200 text-gray-800 rounded">Expired</span>
+          {% endif %}
+        </td>
+
+        <!-- ⭐ Approval Details column -->
+        <td class="px-3 py-2">
+          {% if r.approver_username %}
+            <div class="text-xs">
+              <p><strong>By:</strong> {{ r.approver_username }}</p>
+              <p><strong>At:</strong> {{ r.approved_at }}</p>
+
+              {% if r.approval_method %}
+                {% if r.approval_method == "direct" %}
+                  <span class="px-2 py-1 bg-green-100 text-green-800 rounded">Direct</span>
+                {% elif r.approval_method == "otp" %}
+                  <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded">OTP</span>
+                {% elif r.approval_method == "email" %}
+                  <span class="px-2 py-1 bg-purple-100 text-purple-800 rounded">Email</span>
+                {% endif %}
+              {% endif %}
+            </div>
+          {% else %}
+            <span class="text-xs text-gray-500">Not yet approved</span>
+          {% endif %}
+        </td>
+
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</div>

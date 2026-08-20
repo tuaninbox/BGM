@@ -1,6 +1,6 @@
 from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
 from core.db import Base
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 class BreakglassRequest(Base):
@@ -21,13 +21,13 @@ class BreakglassRequest(Base):
     request_reason = Column(String, nullable=False)
     approve_reason = Column(String, nullable=True)
 
-    start_time = Column(DateTime, nullable=False)
-    end_time = Column(DateTime, nullable=False)
+    start_time = Column(String, nullable=False)
+    end_time = Column(String, nullable=False)
 
     status = Column(String, default="pending")  # pending / approved / rejected
 
-    created_at = Column(DateTime, default=datetime.utcnow)
-    approved_at = Column(DateTime, nullable=True)
+    created_at = Column(String, default=lambda: datetime.now(timezone.utc).isoformat())
+    approved_at = Column(String, nullable=True)
     approval_method = Column(String, nullable=True)  # "direct", "otp", "email"
 
 

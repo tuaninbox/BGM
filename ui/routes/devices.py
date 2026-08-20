@@ -7,7 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 
 from core.db import get_db
-from deps.auth import get_current_user_optional
+from deps.auth import get_current_user, get_current_user_optional
 from core.security import verify_password, create_access_token, hash_password
 from models.account import Account
 from core.device_loader import load_devices
@@ -110,6 +110,54 @@ async def devices_page(
             "has_approver": has_approver,
         },
     )
+
+# @router.post("/requests/{request_id}/copy-password")
+# async def ui_copy_password(request: Request, request_id: int, current_user: Account = Depends(get_current_user)):
+#     vault = VaultClient(request.app.state.config, tenant="NCP")
+#     password = await vault.get_breakglass_password(request_id)
+
+#     return HTMLResponse(
+#         f"""
+#         <script>
+#           navigator.clipboard.writeText("{password}");
+#           document.getElementById('toast').innerHTML =
+#             '<div class="bg-green-100 text-green-700 p-2 rounded mt-2">Password copied!</div>';
+#           setTimeout(() => {{
+#             document.getElementById('toast').innerHTML = '';
+#           }}, 3000);
+#         </script>
+#         """
+#     )
+
+# @router.get("/requests/{request_id}/show-password")
+# async def ui_show_password(request: Request, request_id: int, current_user: Account = Depends(get_current_user)):
+#     vault = VaultClient(request.app.state.config, tenant="NCP")
+#     password = await vault.get_breakglass_password(request_id)
+
+#     return HTMLResponse(
+#         f"""
+#         <div class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+#           <div class="bg-white p-6 rounded shadow-lg w-96 text-center">
+#             <h2 class="text-xl font-bold mb-3">Breakglass Password</h2>
+#             <p class="text-lg font-mono mb-4">{password}</p>
+
+#             <p class="text-xs text-gray-600 mb-4">This window will close automatically in 20 seconds.</p>
+
+#             <button class="bg-gray-300 px-4 py-2 rounded"
+#                     onclick="document.getElementById('modal').innerHTML=''">
+#               Close
+#             </button>
+#           </div>
+#         </div>
+
+#         <script>
+#           setTimeout(() => {{
+#             document.getElementById('modal').innerHTML = '';
+#           }}, 20000);
+#         </script>
+#         """
+#     )
+
 
 @router.get("/interactive")
 async def interactive_page(request: Request):

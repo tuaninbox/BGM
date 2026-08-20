@@ -13,7 +13,7 @@ from models.account import Account
 from core.settings import settings
 
 # API Routers
-from api import auth, accounts, logs as api_logs, request
+from api import auth, accounts, logs as api_logs, request, dashboard
 
 # UI Routers
 from ui.routes import (
@@ -22,7 +22,7 @@ from ui.routes import (
     devices as ui_devices,
     logs as ui_logs,
     request as ui_requests,
-    approval as ui_approvals,
+    dashboard as ui_dashboard
 )
 
 from core.config_loader import load_config
@@ -201,7 +201,7 @@ app.include_router(accounts.router)
 app.include_router(api_logs.router)
 app.include_router(device.router)
 app.include_router(request.router)
-# app.include_router(approval.router)
+app.include_router(dashboard.router)
 
 # UI Routers
 app.include_router(ui_auth.router)
@@ -209,7 +209,7 @@ app.include_router(ui_accounts.router)
 app.include_router(ui_devices.router)
 app.include_router(ui_logs.router)
 app.include_router(ui_requests.router)
-app.include_router(ui_approvals.router)
+app.include_router(ui_dashboard.router)
 
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 # ---------------------------------------------------------
