@@ -1,14 +1,25 @@
-from fastapi import APIRouter, Request, Depends
-from fastapi.responses import HTMLResponse
-from sqlalchemy import select, func
+from urllib import response
+
+from fastapi import APIRouter, Request, Depends, Form, Response
+from fastapi.templating import Jinja2Templates
+from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import select, func
+from core.vault import VaultClient
 
 from core.db import get_db
-from models.request import BreakglassRequest
-from models.account import Account  # adjust import to your project
 from deps.auth import get_current_user
-router = APIRouter()
+from core.security import verify_password, create_access_token, hash_password
+from models.account import Account
+from models.request import BreakglassRequest
+from core.device_loader import load_devices
+from core.audit_logger import log_action
+from core.settings import settings
+from core.debug import debug_error
 
+router = APIRouter(prefix="/ui", tags=["ui"])
+templates = Jinja2Templates(directory="ui/templates")
+templates.env.cache.clear()
 
 @router.get("/approver/dashboard", response_class=HTMLResponse)
 async def approver_dashboard(
@@ -49,8 +60,8 @@ async def approver_dashboard(
     stats_result = await db.execute(stats_stmt)
     pending, approved, rejected, expired = stats_result.one()
 
-    return request.app.state.templates.TemplateResponse(
-        "approver/dashboard.html",
+    return templates.TemplateResponse(
+        "approval.html",
         {
             "request": request,
             "current_user": current_user,

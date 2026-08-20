@@ -1,9 +1,7 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="max-w-6xl mx-auto mt-8">
-
-  <h1 class="text-2xl font-bold mb-6">Breakglass Access Requests</h1>
+  <h1 class="text-2xl font-bold mb-6 text-center">Breakglass Access Requests</h1>
 
   {% if error %}
     <div class="bg-red-100 text-red-700 p-3 rounded mb-4">
@@ -11,7 +9,10 @@
     </div>
   {% endif %}
 
-  <table class="min-w-full bg-white border rounded shadow text-sm">
+  <div class="w-full px-4">  <!-- small gap left/right -->
+  <div class="border rounded bg-white p-4">
+    <div class="overflow-x-auto">
+      <table class="min-w-full border-collapse">
     <thead class="bg-gray-100 border-b">
       <tr>
         <th class="px-3 py-2 text-left">Device</th>
@@ -108,7 +109,7 @@
     </tbody>
   </table>
 
-</div>
+</div></div>
 
 <div id="modal"></div>
 

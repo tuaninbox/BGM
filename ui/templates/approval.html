@@ -1,9 +1,18 @@
 {% extends "base.html" %}
 
 {% block content %}
-<div class="max-w-7xl mx-auto mt-8 space-y-6">
+<!-- <div class="max-w-7xl mx-auto mt-8 space-y-6"> -->
 
-  <h1 class="text-2xl font-bold">Approver Dashboard</h1>
+<div class="w-full px-4">  <!-- small gap left/right -->
+  <h1 class="text-2xl font-bold mb-6 text-center">Approval Dashboard</h1>
+
+  <div class="border rounded bg-white p-4">
+    <div class="overflow-x-auto">
+      <!-- <table class="min-w-full border-collapse"> -->
+
+  
+
+  <!-- <h1 class="text-2xl font-bold">Approver Dashboard</h1> -->
 
   <!-- Summary cards -->
   <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm">
@@ -26,13 +35,19 @@
   </div>
 
   <!-- Filters -->
-  <form
+  <!-- <form
     class="bg-white border rounded shadow p-4 text-sm flex flex-wrap gap-4 items-end"
     hx-get="/ui/approver/dashboard"
     hx-target="#approver-table"
     hx-swap="outerHTML"
-  >
-    <div>
+  > -->
+  <form
+    class="bg-white border rounded shadow p-4 text-sm flex flex-nowrap gap-6 items-end"
+    method="get"
+    action="/ui/approver/dashboard"
+>
+ 
+  <div>
       <label class="block text-xs font-semibold text-gray-600">Status</label>
       <select name="status" class="border rounded px-2 py-1">
         <option value="">All</option>
@@ -176,7 +191,7 @@
     </table>
   </div>
 
-</div>
+</div></div>
 
 <div id="modal"></div>
 {% endblock %}
