@@ -1,0 +1,21 @@
+tenants:
+  NCP:
+    devices:
+      source: "file"   # nagios or "file"
+
+      inventory_file: "devices.csv"
+
+      nagios:
+        hostgroups:
+          - ConfigBackup_ios
+          - ConfigBackup_nxos
+
+    credentials: # Credential file to access devices, usually tacacs cred
+      credential_file: credentials
+
+    vault:
+      vault_address: https://mint.home.tuan.au:8200
+      approle_id_file: approle_id
+      secret_id_file: approle_secretid
+      breakglass-path: NCP/breakglass
+      otp-path: NCP/otp

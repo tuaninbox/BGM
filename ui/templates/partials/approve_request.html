@@ -1,0 +1,29 @@
+<div class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+  <div class="bg-white p-6 rounded shadow-lg w-96">
+
+    <h2 class="text-xl font-bold mb-3">Approve Request</h2>
+
+    <form hx-post="/api/requests/{{ req.id }}/approve"
+          hx-target="#modal"
+          hx-swap="innerHTML">
+
+      <label class="block font-semibold mt-2">Approval Reason</label>
+      <textarea name="approve_reason"
+                class="w-full border rounded p-2"
+                required></textarea>
+
+      <div class="mt-4 flex justify-end">
+        <button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+          Approve
+        </button>
+
+        <button type="button"
+                class="ml-3 bg-gray-300 px-4 py-2 rounded"
+                onclick="document.getElementById('modal').innerHTML=''">
+          Cancel
+        </button>
+      </div>
+    </form>
+
+  </div>
+</div>

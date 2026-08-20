@@ -1,0 +1,115 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="max-w-6xl mx-auto mt-8">
+
+  <h1 class="text-2xl font-bold mb-6">Breakglass Access Requests</h1>
+
+  {% if error %}
+    <div class="bg-red-100 text-red-700 p-3 rounded mb-4">
+      {{ error }}
+    </div>
+  {% endif %}
+
+  <table class="min-w-full bg-white border rounded shadow text-sm">
+    <thead class="bg-gray-100 border-b">
+      <tr>
+        <th class="px-3 py-2 text-left">Device</th>
+        <th class="px-3 py-2 text-left">Account</th>
+        <th class="px-3 py-2 text-left">Requester</th>
+        <th class="px-3 py-2 text-left">Reason</th>
+        <th class="px-3 py-2 text-left">Start</th>
+        <th class="px-3 py-2 text-left">End</th>
+        <th class="px-3 py-2 text-left">Status</th>
+        <th class="px-3 py-2 text-left">Action</th>
+      </tr>
+    </thead>
+
+    <tbody>
+      {% for r in requests %}
+      <tr class="border-b hover:bg-gray-50">
+        <td class="px-3 py-2">{{ r.device_name }}</td>
+        <td class="px-3 py-2">{{ r.account_username }}</td>
+        <td class="px-3 py-2">{{ r.requester }}</td>
+
+        <td class="px-3 py-2">
+          <div>
+            <strong>Request:</strong>
+            <p>{{ r.request_reason }}</p>
+          </div>
+
+          {% if r.approve_reason %}
+          <div class="mt-1">
+            <strong>Approve:</strong>
+            <p>{{ r.approve_reason }}</p>
+          </div>
+          {% endif %}
+        </td>
+
+        <td class="px-3 py-2">{{ r.start_time }}</td>
+        <td class="px-3 py-2">{{ r.end_time }}</td>
+
+        <td class="px-3 py-2">
+          {% if r.status == "pending" %}
+            <span class="px-2 py-1 bg-yellow-200 text-yellow-800 rounded">Pending</span>
+          {% elif r.status == "approved" %}
+            <span class="px-2 py-1 bg-green-200 text-green-800 rounded">Approved</span>
+          {% elif r.status == "rejected" %}
+            <span class="px-2 py-1 bg-red-200 text-red-800 rounded">Rejected</span>
+          {% endif %}
+        </td>
+
+        <td class="px-3 py-2">
+          {% if current_user.role in ["approver", "requester_approver"] %}
+            {% if current_user.username != r.requester and r.status == "pending" %}
+
+              <!-- Direct approval -->
+              <button
+                class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+                hx-get="/ui/requests/{{ r.id }}/approve-modal"
+                hx-target="#modal"
+                hx-swap="innerHTML">
+                Approve
+              </button>
+
+              <!-- OTP approval -->
+              <button
+                class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 ml-2"
+                hx-get="/ui/requests/{{ r.id }}/otp-modal"
+                hx-target="#modal"
+                hx-swap="innerHTML">
+                OTP Approve
+              </button>
+
+              <!-- Reject -->
+              <button
+                class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 ml-2"
+                hx-get="/ui/requests/{{ r.id }}/reject-modal"
+                hx-target="#modal"
+                hx-swap="innerHTML">
+                Reject
+              </button>
+
+            {% else %}
+              <button
+                class="bg-gray-400 text-white px-3 py-1 rounded cursor-not-allowed"
+                disabled>
+                Approve
+              </button>
+
+              {% if current_user.username == r.requester %}
+                <p class="text-xs text-red-600">Cannot approve your own request</p>
+              {% endif %}
+            {% endif %}
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+</div>
+
+<div id="modal"></div>
+
+{% endblock %}

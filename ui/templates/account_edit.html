@@ -1,0 +1,166 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1 class="text-2xl font-bold mb-6 text-center">Edit Account</h1>
+
+<!-- Centered container with consistent spacing -->
+<div class="mt-6 px-4 flex justify-center">
+
+  <!-- Main card -->
+  <div class="bg-white p-6 rounded shadow-md w-full max-w-2xl">
+
+    {% if error %}
+    <div class="mb-4 bg-red-100 border border-red-300 text-red-700 px-3 py-2 rounded">
+      {{ error }}
+    </div>
+    {% endif %}
+
+    <form method="post" onsubmit="return validatePasswords()">
+
+      <!-- Table-like layout -->
+      <div class="space-y-4">
+
+        <!-- Username -->
+        <div>
+          <label class="block mb-1 font-medium">Username</label>
+          <input name="username" value="{{ user.username }}"
+                 class="w-full border px-3 py-2 rounded" required>
+        </div>
+
+        <!-- First Name -->
+        <div>
+          <label class="block mb-1 font-medium">First Name</label>
+          <input name="first_name" value="{{ user.first_name }}"
+                 class="w-full border px-3 py-2 rounded">
+        </div>
+
+        <!-- Last Name -->
+        <div>
+          <label class="block mb-1 font-medium">Last Name</label>
+          <input name="last_name" value="{{ user.last_name }}"
+                 class="w-full border px-3 py-2 rounded">
+        </div>
+
+        <!-- Email -->
+        <div>
+          <label class="block mb-1 font-medium">Email</label>
+          <input name="email" value="{{ user.email }}" type="email"
+                 class="w-full border px-3 py-2 rounded">
+        </div>
+
+        <!-- Role -->
+        <div>
+          <label class="block mb-1 font-medium">Role</label>
+          <select name="role" class="w-full border px-3 py-2 rounded">
+
+            <option value="requester"
+              {% if user.role == "requester" %}selected{% endif %}>
+              Requester
+            </option>
+
+            <option value="approver"
+              {% if user.role == "approver" %}selected{% endif %}>
+              Approver
+            </option>
+
+            <option value="requester_approver"
+              {% if user.role == "requester_approver" %}selected{% endif %}>
+              Requester & Approver
+            </option>
+
+            <option value="admin"
+              {% if user.role == "admin" %}selected{% endif %}>
+              Admin
+            </option>
+
+          </select>
+
+        </div>
+
+        <!-- Tenant -->
+        <div>
+          <label class="block mb-1 font-medium">Tenant</label>
+          <input name="tenant" value="{{ user.tenant }}" class="w-full border px-3 py-2 rounded" readonly>
+        </div>
+ 
+        <!-- Source -->
+        <div>
+          <label class="block mb-1 font-medium">Source</label>
+          <select name="source" class="w-full border px-3 py-2 rounded">
+            <option value="local" {% if user.source == "local" %}selected{% endif %}>Local</option>
+            <option value="ldap" {% if user.source == "ldap" %}selected{% endif %}>LDAP</option>
+            <option value="saml" {% if user.source == "saml" %}selected{% endif %}>SAML</option>
+          </select>
+        </div>
+
+        <!-- Profiles -->
+        <div>
+          <label class="block mb-1 font-medium">Profiles (comma separated)</label>
+          <input name="profiles"
+                 value="{% if user.profiles %}{{ user.profiles | join(', ') }}{% endif %}"
+                 class="w-full border px-3 py-2 rounded">
+        </div>
+
+        <!-- Password -->
+        <div>
+          <label class="block mb-1 font-medium">New Password (optional)</label>
+          <input id="new_password" name="new_password" type="password"
+                 class="w-full border px-3 py-2 rounded">
+        </div>
+
+        <!-- Confirm Password -->
+        <div>
+          <label class="block mb-1 font-medium">Confirm Password</label>
+          <input id="confirm_password" name="confirm_password" type="password"
+                 class="w-full border px-3 py-2 rounded">
+        </div>
+
+        <p id="password_error" class="text-red-600 mb-2 hidden">
+          Passwords do not match.
+        </p>
+
+      </div>
+
+      <!-- Buttons -->
+      <div class="flex justify-end space-x-3 mt-6">
+        <a href="/ui/accounts" class="px-4 py-2 bg-gray-300 rounded">Cancel</a>
+
+        <button class="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700">
+          Save
+        </button>
+      </div>
+
+    </form>
+
+  </div>
+</div>
+
+<script>
+function validatePasswords() {
+  const pw = document.getElementById("new_password").value;
+  const cpw = document.getElementById("confirm_password").value;
+  const error = document.getElementById("password_error");
+
+  if (!pw && !cpw) {
+    error.classList.add("hidden");
+    return true;
+  }
+
+  if (!pw || !cpw) {
+    error.textContent = "Please fill both password fields.";
+    error.classList.remove("hidden");
+    return false;
+  }
+
+  if (pw !== cpw) {
+    error.textContent = "Passwords do not match.";
+    error.classList.remove("hidden");
+    return false;
+  }
+
+  error.classList.add("hidden");
+  return true;
+}
+</script>
+
+{% endblock %}

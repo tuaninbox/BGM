@@ -1,0 +1,40 @@
+<link rel="stylesheet" href="/static/css/xterm.css" />
+<link rel="stylesheet" href="/static/css/tailwind.min.css" />
+
+<script src="/static/js/xterm.js"></script>
+<script src="/static/js/xterm-addon-fit.js"></script>
+<script src="/static/js/terminal.js"></script>
+
+<div id="terminal-container" class="w-screen h-screen bg-black"></div>
+
+<script>
+    const params = new URLSearchParams(window.location.search);
+    const deviceId = params.get("device");
+
+    if (!deviceId) {
+        alert("Missing device ID");
+    }
+
+    // Create WebSocket FIRST
+    ws = new WebSocket(`ws://${window.location.host}/connector/ws/${deviceId}`);
+
+    ws.onopen = () => {
+        initTerminal();   // <-- uses your existing terminal.js
+        term.write(`\r\n[Interactive session started for ${deviceId}]\r\n`);
+        sendResize();
+    };
+
+    ws.onclose = () => {
+        if (term) {
+            term.write(`\r\n[Interactive session closed]\r\n`);
+        }
+        ws = null;
+    };
+
+    window.addEventListener("resize", () => {
+        if (fitAddon) {
+            fitAddon.fit();
+            sendResize();
+        }
+    });
+</script>

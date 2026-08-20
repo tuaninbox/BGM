@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Device Management</title>
+  <script src="https://unpkg.com/htmx.org@1.9.10"></script>
+  <!-- <link href="https://cdn.jsdelivr.net/npm/tailwindcss@2.2.19/dist/tailwind.min.css" rel="stylesheet"> -->
+  <link rel="stylesheet" href="/static/css/tailwind.min.css" />
+</head>
+
+<body class="bg-gray-50 min-h-screen">
+<header class="w-full bg-white shadow-sm px-4 py-3">
+
+  <!-- Top row: user info (right aligned) -->
+  {% if current_user and current_user.username %}
+  <div class="flex justify-end items-center mb-1">
+    <div class="text-sm text-gray-700 flex items-center space-x-3">
+      <span>
+        Logged in as <strong>{{ current_user.username }}</strong>
+        <span class="text-gray-500">({{ current_user.role }})</span>
+      </span>
+
+      <a href="/ui/logout"
+         class="text-sm bg-red-500 text-white px-3 py-1 rounded hover:bg-red-600">
+        Logout
+      </a>
+    </div>
+  </div>
+  {% endif %}
+
+  <!-- Title centered (true center) -->
+  <div class="flex justify-center items-center py-2">
+    <div class="text-4xl font-extrabold tracking-wide bg-gradient-to-r from-gray-700 to-gray-900 bg-clip-text text-transparent">
+      Breakglass Management
+    </div>
+  </div>
+
+  {% if current_user and current_user.username %}
+  <!-- Navigation Menu (tight spacing under title) -->
+  <nav class="mt-2">
+  <ul class="flex space-x-6 text-sm font-medium">
+
+    <!-- Devices -->
+    <li>
+      <a href="/ui/devices"
+         class="text-gray-700 px-3 py-1 rounded-md transition hover:bg-blue-600 hover:text-white">
+        Devices
+      </a>
+    </li>
+
+    <!-- Accounts -->
+    {% if current_user.role == "admin" %}
+      <li>
+        <a href="/ui/accounts"
+           class="text-gray-700 px-3 py-1 rounded-md transition hover:bg-blue-600 hover:text-white">
+          Accounts
+        </a>
+      </li>
+    {% else %}
+      <li>
+        <a href="/ui/accounts/{{ current_user.id }}"
+           class="text-gray-700 px-3 py-1 rounded-md transition hover:bg-blue-600 hover:text-white">
+          My Account
+        </a>
+      </li>
+    {% endif %}
+
+    <!-- Request Dashboard (requester + requester_approver) -->
+    {% if current_user.role in ["requester", "requester_approver", "approver"] %}
+      <li>
+        <a href="/ui/requests"
+           class="text-gray-700 px-3 py-1 rounded-md transition hover:bg-blue-600 hover:text-white">
+          Requests
+        </a>
+      </li>
+    {% endif %}
+
+    <!-- Approver Dashboard (approver + requester_approver) -->
+    {% if current_user.role in ["approver", "requester_approver"] %}
+      <li>
+        <a href="/ui/approver/dashboard"
+           class="text-gray-700 px-3 py-1 rounded-md transition hover:bg-blue-600 hover:text-white">
+          Approvals
+        </a>
+      </li>
+    {% endif %}
+
+    <!-- Audit Logs (admin only) -->
+    {% if current_user.role == "admin" %}
+      <li>
+        <a href="/ui/logs"
+           class="text-gray-700 px-3 py-1 rounded-md transition hover:bg-blue-600 hover:text-white">
+          Audit Logs
+        </a>
+      </li>
+    {% endif %}
+
+  </ul>
+</nav>
+
+  {% endif %}
+
+</header>
+
+
+  <!-- Main Content -->
+<main class="py-6">
+    {% block content %}{% endblock %}
+</main>
+
+
+</body>
+</html>

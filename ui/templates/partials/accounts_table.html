@@ -1,0 +1,64 @@
+{% for u in accounts %}
+<tr id="row-{{ u.id }}" class="border-b hover:bg-gray-50">
+
+  <!-- Username -->
+  <td class="px-4 py-2 font-medium">{{ u.username }}</td>
+
+  <!-- First Name -->
+  <td class="px-4 py-2">{{ u.first_name or "" }}</td>
+
+  <!-- Last Name -->
+  <td class="px-4 py-2">{{ u.last_name or "" }}</td>
+
+  <!-- Email -->
+  <td class="px-4 py-2">{{ u.email or "" }}</td>
+
+  <!-- Role -->
+  <td class="px-4 py-2">{{ u.role }}</td>
+
+  <!-- Tenant -->
+  <td class="px-4 py-2">{{ u.tenant }}</td>
+  
+  <!-- Source -->
+  <td class="px-4 py-2">{{ u.source }}</td>
+
+  <!-- OTP -->
+  <td class="px-4 py-2">
+  {% if u.otp_enabled %}
+    <span class="text-green-600 text-xl">✔</span>
+  {% else %}
+    <span class="text-red-600 text-xl">✘</span>
+  {% endif %}
+  </td>
+
+  <!-- Profiles -->
+  <td class="px-4 py-2">
+    {% if u.profiles %}
+      {{ u.profiles | join(", ") }}
+    {% else %}
+      —
+    {% endif %}
+  </td>
+
+  <!-- Actions -->
+  <td class="px-4 py-2 space-x-2">
+
+    <!-- Edit -->
+    <a href="/ui/accounts/{{ u.id }}/edit"
+       class="bg-yellow-500 text-white px-3 py-1 rounded hover:bg-yellow-600">
+      Edit
+    </a>
+
+    <!-- Delete (HTMX inline) -->
+    <button
+      class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700"
+      hx-get="/ui/accounts/{{ u.id }}/delete-inline"
+      hx-target="#row-{{ u.id }}"
+      hx-swap="outerHTML">
+      Delete
+    </button>
+
+  </td>
+
+</tr>
+{% endfor %}

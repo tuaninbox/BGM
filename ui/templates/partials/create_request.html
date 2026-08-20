@@ -1,0 +1,40 @@
+<div class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
+  <div class="bg-white p-6 rounded shadow-lg w-96">
+
+    <h2 class="text-xl font-bold mb-3">Request Breakglass Access</h2>
+
+    <form hx-post="/api/requests/create"
+          hx-target="#modal"
+          hx-swap="innerHTML">
+      <input type="hidden" name="device_name" value="{{ device_name }}">
+      <input type="hidden" name="account_username" value="{{ account_username }}">
+
+      <label class="block font-semibold mt-2">Start Time</label>
+      <input type="datetime-local" name="start_time"
+             class="w-full border rounded p-2" required>
+
+      <label class="block font-semibold mt-2">End Time</label>
+      <input type="datetime-local" name="end_time"
+             class="w-full border rounded p-2" required>
+
+      <label class="block font-semibold mt-2">Reason</label>
+      <textarea name="request_reason"
+                class="w-full border rounded p-2"
+                placeholder="Why do you need access?"
+                required></textarea>
+
+      <div class="mt-4 flex justify-end">
+        <button class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+          Submit Request
+        </button>
+
+        <button type="button"
+                class="ml-3 bg-gray-300 px-4 py-2 rounded"
+                onclick="document.getElementById('modal').innerHTML=''">
+          Cancel
+        </button>
+      </div>
+    </form>
+
+  </div>
+</div>

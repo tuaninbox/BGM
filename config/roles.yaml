@@ -1,0 +1,21 @@
+roles:
+  admin:
+    - read_devices
+    - read_accounts
+    - create_accounts
+    - update_accounts
+    - delete_accounts
+    - read_logs
+
+  requester_approver:
+    - request_bg_account
+    - approve_bg_account
+    - create_otp
+
+
+  approver:
+    - approve_bg_account
+    - create_otp
+
+  requester:
+    - request_bg_account

@@ -1,0 +1,165 @@
+{% extends "base.html" %}
+
+{% block content %}
+
+{% set filters_active = filter_user or filter_category or filter_action or filter_timestamp or filter_search %}
+{% set panel_open = filters_active or show_filters %}
+
+<h1 class="text-2xl font-bold mb-6 text-center">Audit Logs</h1>
+
+<!-- Right-aligned Filter Buttons -->
+<div class="px-4"> 
+<div class="mb-4 flex justify-end space-x-3">
+
+    <!-- Show Filters (only when panel is hidden) -->
+    <button
+        id="show-filter-btn"
+        type="button"
+        onclick="
+            document.getElementById('filter-panel').classList.remove('hidden');
+            document.getElementById('apply-filter-btn').classList.remove('hidden');
+            document.getElementById('clear-filter-btn').classList.remove('hidden');
+            document.getElementById('hide-filter-btn').classList.remove('hidden');
+            document.getElementById('show-filter-btn').classList.add('hidden');
+
+        "
+        class="bg-gray-700 text-white px-4 py-2 rounded shadow
+               {% if panel_open %}hidden{% else %}inline-block{% endif %}"
+    >
+        Show Filters
+    </button>
+
+    <!-- Apply Filters -->
+    <button
+        id="apply-filter-btn"
+        type="submit"
+        form="filter-form"
+        class="bg-blue-600 text-white px-4 py-2 rounded shadow
+               {% if panel_open %}inline-block{% else %}hidden{% endif %}"
+    >
+        Apply Filters
+    </button>
+
+    <!-- Clear Filters (keeps panel open) -->
+    <a
+        id="clear-filter-btn"
+        href="/ui/logs?show_filters=1"
+        class="bg-red-600 text-white px-4 py-2 rounded shadow
+               {% if panel_open %}inline-block{% else %}hidden{% endif %}"
+    >
+        Clear Filters
+    </a>
+
+    <!-- Hide Filters -->
+    <button
+        id="hide-filter-btn"
+        type="button"
+        onclick="
+            document.getElementById('filter-panel').classList.add('hidden');
+            document.getElementById('apply-filter-btn').classList.add('hidden');
+            document.getElementById('clear-filter-btn').classList.add('hidden');
+            document.getElementById('hide-filter-btn').classList.add('hidden');
+            document.getElementById('show-filter-btn').classList.remove('hidden');
+        "
+        class="bg-gray-700 text-white px-4 py-2 rounded shadow
+               {% if panel_open %}inline-block{% else %}hidden{% endif %}"
+    >
+        Hide Filters
+    </button>
+
+</div>
+</div>
+
+<!-- Filter Panel -->
+<div class="px-4">
+<div id="filter-panel"
+     class="mb-4 p-4 bg-gray-100 rounded shadow
+            {% if panel_open %}block{% else %}hidden{% endif %}">
+
+    <form id="filter-form" method="get" class="space-y-3">
+        <input type="hidden" id="focus-field" name="focus_field" value="">
+        <div class="grid grid-cols-5 gap-4">
+
+            <div>
+                <label class="text-sm font-semibold">Timestamp</label>
+                <input type="text" name="timestamp" value="{{ filter_timestamp or '' }}" class="border p-2 w-full rounded">
+            </div>
+
+            <div>
+                <label class="text-sm font-semibold">User</label>
+                <input type="text" name="user" value="{{ filter_user or '' }}" class="border p-2 w-full rounded">
+            </div>
+
+            <div>
+                <label class="text-sm font-semibold">Action</label>
+                <input type="text" name="action" value="{{ filter_action or '' }}" class="border p-2 w-full rounded">
+            </div>
+
+            <div>
+                <label class="text-sm font-semibold">Category</label>
+                <input type="text" name="category" value="{{ filter_category or '' }}" class="border p-2 w-full rounded">
+            </div>
+
+            <div>
+                <label class="text-sm font-semibold">Search (Details)</label>
+                <input type="text" name="search" value="{{ filter_search or '' }}" class="border p-2 w-full rounded">
+            </div>
+
+        </div>
+
+    </form>
+</div>
+</div>
+
+<!-- Logs Table (inset from page edge) -->
+<div class="mt-6 px-4">
+    <table class="w-full border rounded shadow whitespace-nowrap">
+        <thead class="bg-gray-200">
+            <tr>
+                <th class="px-3 py-2 text-left">Timestamp</th>
+                <th class="px-3 py-2 text-left">User</th>
+                <th class="px-3 py-2 text-left">Action</th>
+                <th class="px-3 py-2 text-left">Category</th>
+                <th class="px-3 py-2 text-left">Details</th>
+                <th class="px-3 py-2 text-left">IP</th>
+                <th class="px-3 py-2 text-left">Path</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for log in logs %}
+            <tr class="border-b hover:bg-gray-50">
+                <td class="px-3 py-2">{{ log.timestamp }}</td>
+                <td class="px-3 py-2">{{ log.user }}</td>
+                <td class="px-3 py-2">{{ log.action }}</td>
+                <td class="px-3 py-2">{{ log.category }}</td>
+                <td class="px-3 py-2">{{ log.details }}</td>
+                <td class="px-3 py-2">{{ log.ip or '' }}</td>
+                <td class="px-3 py-2">{{ log.path or '' }}</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+
+<script>
+document.querySelectorAll('#filter-form input').forEach(input => {
+    input.addEventListener('keydown', function(e) {
+        if (e.key === "Enter") {
+            document.getElementById("focus-field").value = this.name;
+        }
+    });
+});
+
+
+window.addEventListener("DOMContentLoaded", () => {
+    const field = "{{ request.query_params.get('focus_field', '') }}";
+    if (field) {
+        const el = document.querySelector(`[name="${field}"]`);
+        if (el) el.focus();
+    }
+});
+</script>
+
+
+{% endblock %}
