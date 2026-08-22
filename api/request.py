@@ -137,34 +137,6 @@ async def create_request(
         payload_dict["start_time"] = payload.start_time.isoformat()
         payload_dict["end_time"] = payload.end_time.isoformat()
 
-        # req = BreakglassRequest(
-        #     **payload_dict,
-        #     status="pending",
-        # )
-
-        # ---------------------------------------------------------
-        # 3. Convert datetime → ISO8601 string for DB storage
-        # ---------------------------------------------------------
-        # start_str = start_dt.isoformat()   # e.g. 2026-08-22T19:30:16.355518+00:00
-        # end_str = end_dt.isoformat()
-
-
-        # ---------------------------------------------------------
-        # 4. Create DB object using ISO8601 strings
-        # ---------------------------------------------------------
-        # payload = BreakglassRequest(
-        #     device_name=device_name,
-        #     account_username=account_username,
-        #     requester_id=current_user.id,
-        #     requester_username=current_user.username,
-        #     request_reason=request_reason,
-        #     start_time=start_str,
-        #     end_time=end_str,
-        #     status="pending",
-        # )
-        # debug_print("Incoming payload", payload.model_dump())
-        # debug_print("Current user", {"id": current_user.id, "role": current_user.role})
-
         # Permission check
         if current_user.role not in ("requester", "requester_approver"):
             debug_print("Permission denied", current_user.role)
