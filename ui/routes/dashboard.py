@@ -34,11 +34,11 @@ async def approval_dashboard(
     db: AsyncSession = Depends(get_db),
     current_user: Account = Depends(get_current_user),
 ):
+    # Only approver roles allowed
     if not current_user or current_user.role not in ("approver", "requester_approver"):
         return RedirectResponse("/ui/login", status_code=302)
 
     backend_url = f"{settings.backend_url}/api/approval/requests"
-    cookies = request.cookies
 
     resp = await request.app.state.http_client.get(
         backend_url,
@@ -50,17 +50,18 @@ async def approval_dashboard(
             "approver": approver,
             "method": method,
         },
-        cookies=cookies,
+        cookies=request.cookies,
     )
 
     api_data = resp.json()
     requests = api_data.get("requests", [])
+
     # Convert timestamps to local time
-    for r in api_data["requests"]:
-        r["start_time"] = to_local_time(r["start_time"])
-        r["end_time"] = to_local_time(r["end_time"])
-        r["created_at"] = to_local_time(r["created_at"])
-        r["approved_at"] = to_local_time(r["approved_at"])
+    for r in requests:
+        r["start_time"] = to_local_time(r["start_time"]) if r.get("start_time") else None
+        r["end_time"] = to_local_time(r["end_time"]) if r.get("end_time") else None
+        r["created_at"] = to_local_time(r["created_at"]) if r.get("created_at") else None
+        r["approved_at"] = to_local_time(r["approved_at"]) if r.get("approved_at") else None
 
     # Stats
     stats_stmt = select(
@@ -73,26 +74,26 @@ async def approval_dashboard(
     pending, approved, rejected, expired = stats_result.one()
 
     context = {
-                "request": request,
-                "current_user": current_user,
-                "requests": api_data["requests"],
-                "stats": {
-                    "pending": pending,
-                    "approved": approved,
-                    "rejected": rejected,
-                    "expired": expired,
-                },
-                "status": status,
-                "device": device,
-                "account": account,
-                "requester": requester,
-                "approver": approver,
-                "method": method,
-            }
-    
-    # If HTMX request → return ONLY the table fragment
+        "request": request,
+        "current_user": current_user,
+        "requests": requests,
+        "stats": {
+            "pending": pending,
+            "approved": approved,
+            "rejected": rejected,
+            "expired": expired,
+        },
+        "status": status,
+        "device": device,
+        "account": account,
+        "requester": requester,
+        "approver": approver,
+        "method": method,
+    }
+
+    # HTMX partial refresh → only return table
     if request.headers.get("HX-Request"):
         return templates.TemplateResponse("partials/approval_table.html", context)
 
-    # Normal full-page load
+    # Full page load
     return templates.TemplateResponse("dashboard.html", context)

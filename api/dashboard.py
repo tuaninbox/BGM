@@ -50,21 +50,28 @@ async def api_approval_requests(
     result = await db.execute(stmt.order_by(BreakglassRequest.created_at.desc()))
     requests = result.scalars().all()
 
-    # Return raw UTC timestamps (ISO8601)
     return {
         "requests": [
             {
                 "id": r.id,
                 "device_name": r.device_name,
                 "account_username": r.account_username,
-                "requester": r.requester_username,
-                "approver": r.approver_username,
+
+                "requester_id": r.requester_id,
+                "requester_username": r.requester_username,
+
+                "approver_id": r.approver_id,
+                "approver_username": r.approver_username,
+
                 "request_reason": r.request_reason,
                 "approve_reason": r.approve_reason,
+
                 "start_time": r.start_time,
                 "end_time": r.end_time,
+
                 "created_at": r.created_at,
                 "approved_at": r.approved_at,
+
                 "status": r.status,
                 "approval_method": r.approval_method,
             }

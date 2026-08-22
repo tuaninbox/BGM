@@ -13,6 +13,7 @@ class BreakglassRequestCreate(BaseModel):
     start_time: datetime
     end_time: datetime
 
+
 class BreakglassRequestUpdate(BaseModel):
     approver_id: int | None = None
     approver_username: str | None = None

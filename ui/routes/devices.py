@@ -99,6 +99,7 @@ async def devices_page(
         request,
         category="device",
     )
+    # print(f"Request: {devices.request}")
 
     # Render template
     return templates.TemplateResponse(

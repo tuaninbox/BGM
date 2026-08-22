@@ -10,7 +10,12 @@ from core.security import hash_password
 # from core.middleware import AuditMiddleware
 #from starlette.middleware.sessions import SessionMiddleware
 from models.account import Account
+from models.request import BreakglassRequest
 from core.settings import settings
+from datetime import datetime, timezone
+from core.utils import parse_iso8601
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from sqlalchemy.orm import sessionmaker
 
 # API Routers
 from api import auth, accounts, logs as api_logs, request, dashboard
@@ -30,17 +35,9 @@ from core.credential_loader import load_credentials
 from core.device_loader import load_devices
 from core.role_loader import load_roles
 from core.ssh_manager import SSHManager
-
-
 from fastapi.responses import RedirectResponse
-
-
 from fastapi.exceptions import RequestValidationError
 from core.debug import validation_exception_handler
-
-app = FastAPI()
-
-
 
 
 app = FastAPI(title="Breakglass Management")
@@ -81,26 +78,49 @@ async def seed_admin_user():
         await db.commit()
         print("✔ Admin user created: username=admin password=admin123")
 
-# async def cleanup_expired_requests(db: AsyncSession):
-#     stmt = select(BreakglassRequest).where(
-#         BreakglassRequest.end_time < datetime.utcnow(),
-#         BreakglassRequest.status == "approved"
-#     )
-#     result = await db.execute(stmt)
-#     expired = result.scalars().all()
-
-#     for req in expired:
-#         req.status = "expired"
-
-#     await db.commit()
 
 
-# async def scheduler(app):
-#     while True:
-#         async with app.state.db_session() as db:
-#             await cleanup_expired_requests(db)
-#         await asyncio.sleep(3600)  # run hourly
-        
+async def cleanup_expired_requests():
+    """
+    APScheduler job: expire all pending/approved requests whose end_time has passed.
+    Must create a NEW sessionmaker bound to engine (cannot use FastAPI dependency).
+    """
+    now_dt = datetime.now(timezone.utc)
+
+    # Create a fresh sessionmaker bound to engine
+    SchedulerSession = sessionmaker(
+        engine,
+        expire_on_commit=False,
+        class_=AsyncSession
+    )
+
+    async with SchedulerSession() as db:
+        result = await db.execute(
+            select(BreakglassRequest).where(
+                BreakglassRequest.status.in_(["pending", "approved"])
+            )
+        )
+        rows = result.scalars().all()
+
+        changed = False
+
+        for r in rows:
+            end_dt = parse_iso8601(r.end_time)
+            if end_dt is None or end_dt < now_dt:
+                if r.status != "expired":
+                    r.status = "expired"
+                    changed = True
+
+        if changed:
+            await db.commit()
+            print("✔ Cleanup: expired requests updated")
+
+
+def start_scheduler():
+    scheduler = AsyncIOScheduler()
+    scheduler.add_job(cleanup_expired_requests, "interval", minutes=1)
+    scheduler.start()
+    print("✔ APScheduler started")
 # ---------------------------------------------------------
 # Startup
 # ---------------------------------------------------------
@@ -139,6 +159,7 @@ async def startup():
     #     await conn.run_sync(Base.metadata.create_all)
 
     print("✔ Startup complete (tenant-specific loading deferred)")
+    start_scheduler()
 
 # @app.on_event("startup")
 # async def startup():

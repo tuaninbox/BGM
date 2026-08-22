@@ -11,7 +11,7 @@ def load_devices_from_file(path: str) -> List[Dict]:
         for row in reader:
             devices.append({
                 "id": row.get("Host") or row.get("IP"),
-                "name": row.get("Host"),
+                "name": row.get("Host").lower(),
                 "ip": row.get("IP"),
                 "port": row.get("Port"),
                 "location": row.get("Location"),

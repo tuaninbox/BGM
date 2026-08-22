@@ -65,34 +65,28 @@
           </span>
 
           <p class="text-xs text-gray-600 mb-2">
-            pending until {{ d.request.end_time }}
+            Requested by {{ d.request.requester_username }}<br>
+            Active until {{ d.request.end_time }}
           </p>
 
         {% elif d.request.status == "approved" %}
-        <div id="pwbox-{{ d.request.id }}">
           <span class="text-green-700 bg-green-100 px-2 py-1 rounded text-xs">
-            Approved</span>
-            <span class="text-xs text-gray-600 mb-2">
-            by {{ d.request.approver_username }}</span>
+            Approved
+          </span>
+
           <p class="text-xs text-gray-600 mb-2">
+            Requested by {{ d.request.requester_username }}<br>
             Active until {{ d.request.end_time }}
           </p>
-          </div>
+
           <button
             class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 mr-2"
-            type="button"
-            onclick="copyBreakglassPassword({{ d.request.id }})">
-            Copy Password
-          </button>
-
-          <!-- <button
-            class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 mr-2"
-            hx-get="/ui/requests/{{ d.request.id }}/copy-password"
+            hx-post="/ui/requests/{{ d.request.id }}/copy-password"
             hx-trigger="click"
-            hx-target="#modal"
+            hx-target="#toast"
             hx-swap="innerHTML">
             Copy Password
-          </button> -->
+          </button>
 
           <button
             class="bg-gray-700 text-white px-3 py-1 rounded hover:bg-gray-800"

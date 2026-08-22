@@ -1,32 +1,31 @@
 {% extends "base.html" %}
 
 {% block content %}
-  <h1 class="text-2xl font-bold mb-6 text-center">Breakglass Access Requests</h1>
+<h1 class="text-2xl font-bold mb-6 text-center">Breakglass Access Requests</h1>
 
-  {% if error %}
-    <div class="bg-red-100 text-red-700 p-3 rounded mb-4">
-      {{ error }}
-    </div>
-  {% endif %}
+{% if error %}
+  <div class="bg-red-100 text-red-700 p-3 rounded mb-4">
+    {{ error }}
+  </div>
+{% endif %}
 
-  <div class="w-full px-4">  <!-- small gap left/right -->
-  <div class="border rounded bg-white p-4">
-    <div class="overflow-x-auto">
-      <table class="min-w-full border-collapse table-fixed">
+<div class="w-full px-4">
+<div class="border rounded bg-white p-4">
+<div class="overflow-x-auto">
+
+<table class="min-w-full border-collapse table-fixed">
   <thead class="bg-gray-100 border-b">
     <tr>
       <th class="px-3 py-2 text-left w-26">Device</th>
       <th class="px-3 py-2 text-left w-26">Account</th>
 
-      <!-- Requester column -->
       <th class="px-3 py-2 text-left w-[25%]">Requester</th>
-
-      <!-- Approver column -->
       <th class="px-3 py-2 text-left w-[25%]">Approver</th>
 
-      <th class="px-3 py-2 text-left w-26">Start</th>
-      <th class="px-3 py-2 text-left w-26">End</th>
-      <th class="px-3 py-2 text-left w-24">Status</th>
+      <th class="px-3 py-2 text-left w-26">Time Frame</th>
+
+      <th class="px-3 py-2 text-left w-[20%]">Details</th>
+
       <th class="px-3 py-2 text-left w-[25%]">Action</th>
     </tr>
   </thead>
@@ -35,28 +34,29 @@
     {% for r in requests %}
     <tr class="border-b hover:bg-gray-50">
 
+      <!-- Device -->
       <td class="px-3 py-2">{{ r.device_name }}</td>
+
+      <!-- Account -->
       <td class="px-3 py-2">{{ r.account_username }}</td>
 
-      <!-- ⭐ Requester column -->
-      <td class="px-3 py-2 w-[25%]">
-        <div>
-          <strong>{{ r.requester }}</strong>
-        </div>
-        <div class="mt-1 text-sm text-gray-700">
+      <!--  Requester -->
+      <td class="px-3 py-2">
+        <div><strong>{{ r.requester_username }}</strong></div>
+
+        <div class="mt-1 text-xs text-gray-700">
           <strong>Reason:</strong>
           <p>{{ r.request_reason }}</p>
         </div>
       </td>
 
-      <!-- ⭐ Approver column -->
-      <td class="px-3 py-2 w-[25%]">
-        {% if r.approver %}
-          <div>
-            <strong>{{ r.approver }}</strong>
-          </div>
+      <!-- Approver -->
+      <td class="px-3 py-2">
+        {% if r.approver_username %}
+          <div><strong>{{ r.approver_username }}</strong></div>
+
           {% if r.approve_reason %}
-          <div class="mt-1 text-sm text-gray-700">
+          <div class="mt-1 text-xs text-gray-700">
             <strong>Reason:</strong>
             <p>{{ r.approve_reason }}</p>
           </div>
@@ -66,92 +66,95 @@
         {% endif %}
       </td>
 
-      <td class="px-3 py-2">{{ r.start_time }}</td>
-      <td class="px-3 py-2">{{ r.end_time }}</td>
-
+      <!--  Time Frame -->
       <td class="px-3 py-2">
-        {% if r.status == "pending" %}
-          <span class="px-2 py-1 bg-yellow-200 text-yellow-800 rounded">Pending</span>
-        {% elif r.status == "approved" %}
-          <span class="px-2 py-1 bg-green-200 text-green-800 rounded">Approved</span>
-        {% elif r.status == "rejected" %}
-          <span class="px-2 py-1 bg-red-200 text-red-800 rounded">Rejected</span>
-        {% endif %}
+        <div class="text-xs leading-tight">
+          <div><strong>{{ r.start_time }}</strong></div>
+          <div><strong>{{ r.end_time }}</strong></div>
+        </div>
       </td>
 
-   <td class="px-3 py-2">
+      <!--  Details (Created + Approved At) -->
+      <td class="px-3 py-2 text-xs">
+        <div><strong>Created:</strong> {{ r.created_at }}</div>
+        <div><strong>Approved:</strong> {{ r.approved_at }}</div>
+      </td>
 
-  {% if r.status == "pending" %}
+      <!--  Action (unchanged) -->
+      <td class="px-3 py-2">
+        <div class="mb-1">
+          {% if r.status == "pending" %}
+            <span class="px-2 py-1 bg-yellow-200 text-yellow-800 rounded">Pending</span>
+          {% elif r.status == "approved" %}
+            <span class="px-2 py-1 bg-green-200 text-green-800 rounded">Approved</span>
+          {% elif r.status == "rejected" %}
+            <span class="px-2 py-1 bg-red-200 text-red-800 rounded">Rejected</span>
+          {% elif r.status == "expired" %}
+            <span class="px-2 py-1 bg-gray-200 text-gray-800 rounded">Expired</span>
+          {% endif %}
+        </div>
 
-    {# ============================================================= #}
-    {# Case 1: User is APPROVER or REQUESTER_APPROVER                #}
-    {# ============================================================= #}
-    {% if current_user.role in ["approver", "requester_approver"] %}
-
-      {% if current_user.username != r.requester %}
-
-        <!-- Direct approval -->
-        <button
-          class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
-          hx-get="/ui/requests/{{ r.id }}/approve-modal"
-          hx-target="#modal"
-          hx-swap="innerHTML">
-          Approve
-        </button>
-
-        <!-- Reject -->
-        <button
-          class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 ml-2"
-          hx-get="/ui/requests/{{ r.id }}/reject-modal"
-          hx-target="#modal"
-          hx-swap="innerHTML">
-          Reject
-        </button>
-
-      {% else %}
-
-        {# User IS requester #}
-
-        {% if current_user.role == "requester_approver" %}
-          <!-- OTP Approve for requester_approver on own request -->
-          <button
-            class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-            hx-get="/ui/requests/{{ r.id }}/otp-modal"
-            hx-target="#modal"
-            hx-swap="innerHTML">
-            OTP Approve
-          </button>
-        {% else %}
-          <p class="text-xs text-red-600">Cannot approve your own request</p>
+        {% if r.approval_method %}
+          {% if r.approval_method == "direct" %}
+            <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Direct</span>
+          {% elif r.approval_method == "otp" %}
+            <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">OTP</span>
+          {% elif r.approval_method == "email" %}
+            <span class="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">Email</span>
+          {% endif %}
         {% endif %}
+        {% if r.status == "pending" %}
 
-      {% endif %}
+          {% if current_user.role in ["approver", "requester_approver"] %}
+            {% if current_user.username != r.requester_username %}
 
-    {% endif %}
+              <!-- Direct approval -->
+              <button
+                class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+                hx-get="/ui/requests/{{ r.id }}/approve-modal"
+                hx-target="#modal"
+                hx-swap="innerHTML">
+                Approve
+              </button>
 
-    {# ============================================================= #}
-    {# Case 2: User is REQUESTER ONLY                                #}
-    {# ============================================================= #}
-    {% if current_user.role == "requester" %}
+              <!-- Reject -->
+              <button
+                class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 ml-2"
+                hx-get="/ui/requests/{{ r.id }}/reject-modal"
+                hx-target="#modal"
+                hx-swap="innerHTML">
+                Reject
+              </button>
 
-      {% if current_user.username == r.requester %}
-        <!-- OTP Approve for requester on own request -->
-        <button
-          class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-          hx-get="/ui/requests/{{ r.id }}/otp-modal"
-          hx-target="#modal"
-          hx-swap="innerHTML">
-          OTP Approve
-        </button>
-      {% endif %}
+            {% else %}
+              {% if current_user.role == "requester_approver" %}
+                <!-- OTP Approve -->
+                <button
+                  class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                  hx-get="/ui/requests/{{ r.id }}/otp-modal"
+                  hx-target="#modal"
+                  hx-swap="innerHTML">
+                  OTP Approve
+                </button>
+              {% else %}
+                <p class="text-xs text-red-600">Cannot approve your own request</p>
+              {% endif %}
+            {% endif %}
+          {% endif %}
 
-    {% endif %}
+          {% if current_user.role == "requester" or current_user.role == "requester_approver" and current_user.username == r.requester %}
+            <!-- OTP Approve -->
+            <button
+              class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+              hx-get="/ui/requests/{{ r.id }}/otp-modal"
+              hx-target="#modal"
+              hx-swap="innerHTML">
+              OTP Approve
+            </button>
+          {% endif %}
 
-  {% endif %}
-
-</td>
-
-
+        {% endif %}
+      </td>
 
     </tr>
     {% endfor %}

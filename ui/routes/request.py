@@ -2,7 +2,7 @@ from urllib import response
 
 from fastapi import APIRouter, Request, Depends, Form, Response
 from fastapi.templating import Jinja2Templates
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from core.vault import VaultClient
@@ -135,8 +135,13 @@ async def ui_create_request(
             },
         )
 
-    # Success → redirect to devices page
-    return RedirectResponse("/ui/devices", status_code=302)
+    # Success → HTMX redirect
+    return Response(
+        headers={"HX-Redirect": "/ui/devices"},
+        status_code=200
+    )
+    # # Success → redirect to devices page
+    # return RedirectResponse("/ui/devices", status_code=302)
 
 
 
@@ -317,6 +322,119 @@ async def ui_reject_request(
         headers={"HX-Redirect": "/ui/requests"},
         status_code=200
     )
+
+
+@router.get("/requests/{req_id}/show-password", response_class=HTMLResponse)
+async def ui_show_password(
+    req_id: int,
+    request: Request,
+    current_user: Account = Depends(get_current_user),
+):
+    backend_url = f"{settings.backend_url}/api/requests/{req_id}/show-password"
+
+    try:
+        resp = await request.app.state.http_client.get(
+            backend_url,
+            cookies=request.cookies,
+        )
+    except Exception as e:
+        return HTMLResponse(
+            f"<div class='p-4 bg-red-100 text-red-700'>Backend error: {e}</div>"
+        )
+
+    data = resp.json()
+
+    if not data.get("ok"):
+        return HTMLResponse(
+            f"<div class='p-4 bg-red-100 text-red-700'>Error: {data.get('error')}</div>"
+        )
+
+    password = data["password"]
+
+    return templates.TemplateResponse(
+        "partials/show_password.html",
+        {
+            "request": request,
+            "password": data["password"],
+            "device": data["device"],
+            "username": data["username"],
+            "req_id": req_id,
+        },
+    )
+    # return HTMLResponse(
+    #     f"""
+    #     <div hx-on:load="
+    #         setTimeout(() => {{
+    #             htmx.ajax('GET', '/ui/requests/{req_id}/show-password-hide', '#pwbox-{req_id}');
+    #         }}, 20000);
+    #     ">
+    #         <span class="font-mono text-lg">{password}</span>
+    #         <button
+    #             class="ml-2 text-blue-600 hover:text-blue-800"
+    #             hx-on:click="
+    #                 navigator.clipboard.writeText('{password}');
+    #                 htmx.ajax('GET', '/ui/requests/{req_id}/show-password-hide', '#pwbox-{req_id}');
+    #             ">
+    #             📋
+    #         </button>
+
+    #         <button
+    #             class="ml-4 text-gray-700 underline"
+    #             hx-get="/ui/requests/{req_id}/show-password-hide"
+    #             hx-target="#pwbox-{req_id}"
+    #             hx-swap="innerHTML">
+    #             Hide Password
+    #         </button>
+    #     </div>
+    #     """
+    # )
+ 
+
+@router.get("/requests/{req_id}/copy-password", response_class=HTMLResponse)
+async def ui_copy_password(
+    req_id: int,
+    request: Request,
+    current_user: Account = Depends(get_current_user),
+):
+    backend_url = f"{settings.backend_url}/api/requests/{req_id}/copy-password"
+
+    try:
+        resp = await request.app.state.http_client.get(
+            backend_url,
+            cookies=request.cookies,
+        )
+    except Exception as e:
+        return HTMLResponse(
+            f"<div class='p-4 bg-red-100 text-red-700'>Backend error: {e}</div>"
+        )
+
+    data = resp.json()
+
+    if not data.get("ok"):
+        return HTMLResponse(
+            f"<div class='p-4 bg-red-100 text-red-700'>Error: {data.get('error')}</div>"
+        )
+
+    password = data["password"]
+    return JSONResponse({"ok": True, "password": password})
+    # print(password)
+    # return HTMLResponse(
+    #     f"""
+    #     <div
+    #     id="toast-msg"
+    #     hx-on:load="
+    #         navigator.clipboard.writeText('{password}');
+    #         showCopyToast('Password copied');
+    #         setTimeout(() => document.getElementById('toast-msg').remove(), 10);
+    #     "
+    #     class="hidden">
+    #     </div>
+    #     """
+    # )
+
+
+
+
 
 
 # @router.get("/requests/{req_id}/approve-modal", response_class=HTMLResponse)
