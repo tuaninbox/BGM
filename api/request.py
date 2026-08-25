@@ -849,6 +849,13 @@ async def rotation_callback(
     if status in ("success", "failed"):
         req.rotation_at = datetime.now(timezone.utc).isoformat() # + "Z"
 
+    if status == "success":
+        req.rotation_first_error = None
+        req.rotation_failure_notified = False
+
+        # Send success email
+        await send_rotation_success_email(req)
+
     await db.commit()
 
     return {

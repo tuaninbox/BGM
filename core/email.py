@@ -192,6 +192,153 @@ async def send_email_approval_links(req: BreakglassRequest, db: AsyncSession):
             approval_link
         )
 
+def send_rotation_success_email(
+    requester_email: str,
+    device_name: str,
+    account_username: str,
+    finished_at: str,
+):
+    body = f"""
+Breakglass account rotation has completed successfully.
+
+Device: {device_name}
+Account: {account_username}
+
+Rotation finished at:
+{finished_at}
+
+You may now safely continue normal operations.
+"""
+
+    send_email(
+        to=requester_email,
+        subject="Breakglass Rotation Successful",
+        body=body
+    )
+
+def send_rotation_success_email_html(
+    requester_email: str,
+    device_name: str,
+    account_username: str,
+    finished_at: str,
+):
+    subject = "Breakglass Rotation Successful"
+
+    body = f"""\
+<html>
+  <body style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+    <h2 style="color: #2c7a7b;">Breakglass account rotation completed successfully</h2>
+
+    <p>The breakglass account rotation has finished successfully.</p>
+
+    <table style="border-collapse: collapse; margin-top: 10px;">
+      <tr>
+        <td style="padding: 4px 8px; font-weight: bold;">Device:</td>
+        <td style="padding: 4px 8px;">{device_name}</td>
+      </tr>
+      <tr>
+        <td style="padding: 4px 8px; font-weight: bold;">Account:</td>
+        <td style="padding: 4px 8px;">{account_username}</td>
+      </tr>
+      <tr>
+        <td style="padding: 4px 8px; font-weight: bold;">Finished at:</td>
+        <td style="padding: 4px 8px;">{finished_at}</td>
+      </tr>
+    </table>
+
+    <p style="margin-top: 15px;">
+      You may now safely continue normal operations.
+    </p>
+
+    <p style="margin-top: 20px; font-size: 12px; color: #777;">
+      This is an automated notification from the Breakglass system.
+    </p>
+  </body>
+</html>
+"""
+
+    send_email(to=requester_email, subject=subject, body=body, is_html=True)
+
+def send_rotation_failure_email(
+    requester_email: str,
+    device_name: str,
+    account_username: str,
+    error_message: str,
+    first_failed_at: str,
+):
+    body = f"""
+Breakglass account rotation has permanently failed.
+
+Device: {device_name}
+Account: {account_username}
+
+First failure detected:
+{first_failed_at}
+
+Error:
+{error_message}
+
+Rotation has been retried multiple times and exceeded the allowed failure window.
+Please investigate the rotation service or device connectivity.
+"""
+
+    send_email(
+        to=requester_email,
+        subject="Breakglass Rotation FAILED",
+        body=body
+    )
+
+
+def send_rotation_failure_email_html(
+    requester_email: str,
+    device_name: str,
+    account_username: str,
+    error_message: str,
+    first_failed_at: str,
+):
+    subject = "Breakglass Rotation FAILED"
+
+    body = f"""\
+<html>
+  <body style="font-family: Arial, sans-serif; font-size: 14px; color: #333;">
+    <h2 style="color: #c53030;">Breakglass account rotation permanently failed</h2>
+
+    <p>
+      The breakglass account rotation has failed after multiple retry attempts and exceeded the allowed failure window.
+    </p>
+
+    <table style="border-collapse: collapse; margin-top: 10px;">
+      <tr>
+        <td style="padding: 4px 8px; font-weight: bold;">Device:</td>
+        <td style="padding: 4px 8px;">{device_name}</td>
+      </tr>
+      <tr>
+        <td style="padding: 4px 8px; font-weight: bold;">Account:</td>
+        <td style="padding: 4px 8px;">{account_username}</td>
+      </tr>
+      <tr>
+        <td style="padding: 4px 8px; font-weight: bold;">First failure detected:</td>
+        <td style="padding: 4px 8px;">{first_failed_at}</td>
+      </tr>
+      <tr>
+        <td style="padding: 4px 8px; font-weight: bold;">Error:</td>
+        <td style="padding: 4px 8px;">{error_message}</td>
+      </tr>
+    </table>
+
+    <p style="margin-top: 15px;">
+      Please investigate the rotation service, device connectivity, or credential store to restore rotation capability.
+    </p>
+
+    <p style="margin-top: 20px; font-size: 12px; color: #777;">
+      This is an automated notification from the Breakglass system.
+    </p>
+  </body>
+</html>
+"""
+
+    send_email(to=requester_email, subject=subject, body=body, is_html=True)
+
 async def main():
     """
     Run this file directly to send a test email:

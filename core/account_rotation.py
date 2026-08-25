@@ -88,6 +88,20 @@ async def rotate_accounts_for_closed_requests():
 
                 # After all retries
                 if r.rotation_status == "failed":
+                    # Set timestamp only on first failure
+                    if not r.rotation_first_error:
+                        r.rotation_first_error = datetime.now(timezone.utc).isoformat()
+                        await db.commit()
+
+
+                    elapsed = datetime.now(timezone.utc).isoformat() - r.rotation_first_error
+
+                    if elapsed.total_seconds() >= settings.rotation_failure_window_minutes * 60:
+                        if not r.rotation_failure_notified:
+                            await send_rotation_failure_email(r)
+                            r.rotation_failure_notified = True
+                            await db.commit()
+
                     log_action(
                         user="system",
                         action="rotation_permanent_failure",

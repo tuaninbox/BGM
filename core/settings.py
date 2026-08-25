@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     rotation_api_url: str = "http://localhost:8000"
     rotation_api_token: str = "Some_secret_key"
     rotation_max_retries: int = 3
+    rotation_failure_window_minutes: int = 15
 
     # Email approval secret
     email_approval_secret: str = "Very Strong Secret Key Remember to change me"
