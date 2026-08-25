@@ -41,7 +41,7 @@ def log_action(user, action: str, details: str, request: Request,
         "category": category,
         "details": details,
         "ip": request.client.host if request and request.client else None,
-        "path": request.url.path,
+        "path": request.url.path if request else None,
         "status": status,
     }
 
