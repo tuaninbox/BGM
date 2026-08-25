@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="w-full px-4">
+  <h1 class="text-2xl font-bold mb-6 text-center">Rotation Jobs</h1>
+
+  <form
+    class="bg-white border rounded shadow p-4 text-sm flex flex-wrap gap-6 items-end mb-6"
+    hx-get="/ui/rotation/jobs"
+    hx-target="#rotation-jobs-table"
+    hx-swap="outerHTML"
+    hx-trigger="change"
+  >
+    <div>
+      <label class="block text-xs font-semibold text-gray-600">Rotation Status</label>
+      <select name="status" class="border rounded px-2 py-1">
+        <option value="">All</option>
+        <option value="pending"  {% if status == "pending" %}selected{% endif %}>Pending</option>
+        <option value="queued"   {% if status == "queued" %}selected{% endif %}>Queued</option>
+        <option value="running"  {% if status == "running" %}selected{% endif %}>Running</option>
+        <option value="success"  {% if status == "success" %}selected{% endif %}>Success</option>
+        <option value="failed"   {% if status == "failed" %}selected{% endif %}>Failed</option>
+      </select>
+    </div>
+  </form>
+
+  {% include "partials/rotation_jobs_table.html" %}
+</div>
+{% endblock %}

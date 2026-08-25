@@ -23,6 +23,11 @@ logger = logging.getLogger("security.bruteforce")
 logger.setLevel(logging.INFO)
 
 
+def generate_api_token():
+    raw = secrets.token_urlsafe(32)  # 32 bytes → ~43 chars
+    return f"rot_{raw}"
+
+
 def hash_password(password: str) -> str:
     return pwd_context.hash(password)
 

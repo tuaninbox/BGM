@@ -1,17 +1,16 @@
-from fastapi import APIRouter, Request, Depends, Form, HTTPException
+from fastapi import APIRouter, Request, Depends, Form, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, timezone
 from core.db import get_db
-# from models.request import BreakglassRequest
 from schemas.request import BreakglassRequestCreate, BreakglassRequestUpdate
 from models.account import Account
 from models.request import BreakglassRequest
 from deps.auth import get_current_user
 from core.debug import debug_error, debug_print
 from core.vault import VaultClient
-from core.email import generate_email_approval_token
+from core.email import generate_email_approval_token, validate_email_approval_token, send_approval_email
 from core.audit_logger import log_action
 from core.settings import settings
 from core.permissions import has_permission
@@ -23,8 +22,22 @@ router = APIRouter(prefix="/api", tags=["accounts"])
 
 
 @router.get("/requests")
-async def list_requests(db: AsyncSession = Depends(get_db)):
+async def list_requests(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+    current_user: Account = Depends(get_current_user),
+):
+    roles = request.app.state.roles
+
+    # ---------------------------------------------------------
+    # RBAC: user must have read_requests permission
+    # ---------------------------------------------------------
+    if not has_permission(current_user.role, "read_requests", roles):
+        return {"ok": False, "error": "Permission denied"}
+
+    # ---------------------------------------------------------
     # Fetch all requests
+    # ---------------------------------------------------------
     result = await db.execute(select(BreakglassRequest))
     requests = result.scalars().all()
 
@@ -47,26 +60,38 @@ async def list_requests(db: AsyncSession = Depends(get_db)):
             "account_username": r.account_username,
 
             "requester_id": r.requester_id,
-            "requester_username": r.requester_username,
+            "requester_username": requester_username,
 
             "approver_id": r.approver_id,
-            "approver_username": r.approver_username,
+            "approver_username": approver_username,
 
             "request_reason": r.request_reason,
             "approve_reason": r.approve_reason,
 
+            # Time window
             "start_time": to_local_time(r.start_time) if r.start_time else None,
             "end_time": to_local_time(r.end_time) if r.end_time else None,
 
+            # Status
             "status": r.status,
 
+            # Timestamps
             "created_at": to_local_time(r.created_at) if r.created_at else None,
             "approved_at": to_local_time(r.approved_at) if r.approved_at else None,
 
-            "approval_method": r.approval_method,   # "direct", "otp"
+            # Approval method: direct / otp / email
+            "approval_method": r.approval_method,
+
+            # ---------------------------------------------------------
+            # Rotation information
+            # ---------------------------------------------------------
+            "rotation_status": r.rotation_status,     # queued / running / success / failed
+            "rotation_error": r.rotation_error,       # error message or None
+            "rotation_at": to_local_time(r.rotation_at) if r.rotation_at else None,
         })
 
-    return {"requests": response}
+    return {"ok": True, "requests": response}
+
 
 
 @router.get("/approverlist", response_model=dict)
@@ -96,6 +121,7 @@ async def get_otp_approvers(
 @router.post("/requests/create")
 async def create_request(
     request: Request,
+    background_tasks: BackgroundTasks,
     device_name: str = Form(...),
     account_username: str = Form(...),
     start_time: datetime = Form(...),
@@ -104,23 +130,43 @@ async def create_request(
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
     ):
-    
+    roles = request.app.state.roles
+
     try:
         # ---------------------------------------------------------
-        # 1. Convert incoming times to UTC datetime objects
+        # Permission check (RBAC)
+        # ---------------------------------------------------------
+        if not has_permission(current_user.role, "request_bg_account", roles):
+            return {
+                "ok": False,
+                "error": "You do not have permission to create requests",
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
+            }
+
+        # ---------------------------------------------------------
+        # Convert incoming times to UTC datetime objects
         # ---------------------------------------------------------
         start_dt = start_time.astimezone(timezone.utc)
         end_dt = end_time.astimezone(timezone.utc)
 
         # ---------------------------------------------------------
-        # 2. Validate using datetime objects (correct)
+        # Time validation
         # ---------------------------------------------------------
         if end_dt <= start_dt:
-            raise HTTPException(400, "End time must be after start time")
+            return {
+                "ok": False,
+                "error": "End time must be after start time",
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
 
         if end_dt > start_dt + timedelta(hours=72):
-            raise HTTPException(400, "End time cannot exceed 72 hours from start time")
+            return {
+                "ok": False,
+                "error": "End time cannot exceed 72 hours from start time",
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
 
+        # Build payload
         payload = BreakglassRequestCreate(
             device_name=device_name,
             account_username=account_username,
@@ -132,53 +178,30 @@ async def create_request(
         )
 
         payload_dict = payload.model_dump()
-
-        # Convert datetime → ISO8601 for DB
         payload_dict["start_time"] = payload.start_time.isoformat()
         payload_dict["end_time"] = payload.end_time.isoformat()
 
-        # Permission check
-        if current_user.role not in ("requester", "requester_approver"):
-            debug_print("Permission denied", current_user.role)
-            raise HTTPException(403, "Forbidden")
-
-        # Time validation
-        debug_print("Time window", {
-            "start_time": payload.start_time,
-            "end_time": payload.end_time
-        })
-
+        # ---------------------------------------------------------
         # Vault lookup
-        debug_print("Fetching breakglass accounts from Vault")
-
+        # ---------------------------------------------------------
         vault = VaultClient(request.app.state.config, tenant="NCP")
         bgaccounts = await vault.get_breakglass_accounts()
-
-        debug_print("Vault accounts count", len(bgaccounts))
 
         bg_lookup = {item["device"]: item for item in bgaccounts}
         bg = bg_lookup.get(payload.device_name)
 
         if not bg:
-            debug_print("Breakglass account not found", payload.device_name)
-            raise HTTPException(404, "Breakglass account not found for device")
+            return {
+                "ok": False,
+                "error": "Breakglass account not found for device",
+                "timestamp": datetime.utcnow().isoformat() + "Z"
+            }
 
         account_username = bg["username"]
-        debug_print("Resolved breakglass username", account_username)
-        # ---------------------------------------------------------
-        # DUPLICATE CHECK
-        # ---------------------------------------------------------
-        debug_print("Checking for duplicate request", {
-            "device_name": payload.device_name,
-            "account_username": account_username,
-            "requester_id": current_user.id
-        })
 
         # ---------------------------------------------------------
         # DUPLICATE CHECK (with expiry handling)
         # ---------------------------------------------------------
-
-        # 1. Fetch ALL pending requests for this device/user
         dup_query = await db.execute(
             select(BreakglassRequest).where(
                 BreakglassRequest.device_name == payload.device_name,
@@ -189,81 +212,65 @@ async def create_request(
         )
 
         pending_requests = dup_query.scalars().all()
-
         now = datetime.now(timezone.utc)
 
         active_requests = []
         expired_requests = []
 
-        # 2. Check each request's end_time
         for r in pending_requests:
             try:
-                end_dt = datetime.fromisoformat(r.end_time)
+                end_dt_existing = datetime.fromisoformat(r.end_time)
             except Exception:
-                # If parsing fails, treat as expired
                 expired_requests.append(r)
                 continue
 
-            if end_dt < now:
-                # Expired → mark it
+            if end_dt_existing < now:
                 r.status = "expired"
                 expired_requests.append(r)
             else:
-                # Still active
                 active_requests.append(r)
 
-        # 3. Commit expired updates (if any)
         if expired_requests:
             await db.commit()
 
-        # 4. Determine duplicate
         duplicate = active_requests[0] if active_requests else None
 
-        # 5. If duplicate exists → reject
         if duplicate:
-            debug_print("Duplicate request detected", {
-                "existing_request_id": duplicate.id
-            })
-            raise HTTPException(
-                409,
-                f"A pending request already exists (request_id={duplicate.id})"
-            )
+            return {
+                "ok": False,
+                "error": f"A pending request already exists (request_id={duplicate.id})",
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
+            }
 
-        # If no active requests remain → allow creation
-        debug_print("No active duplicate requests found")
-
+        # ---------------------------------------------------------
         # Create DB object
-        req = BreakglassRequest(**payload.model_dump(), status="pending")
-
-        debug_print("BreakglassRequest object created", req.__dict__)
+        # ---------------------------------------------------------
+        req = BreakglassRequest(**payload_dict, status="pending")
 
         db.add(req)
         await db.commit()
         await db.refresh(req)
 
-        debug_print("BreakglassRequest committed", {"request_id": req.id})
-
+        # ---------------------------------------------------------
         # Approver lookup
+        # ---------------------------------------------------------
         result = await db.execute(
             select(Account).where(
                 Account.role.in_(["approver", "requester_approver"]),
                 Account.otp_enabled == True
             )
-        )   
-
+        )
         approvers = result.scalars().all()
-
-        # Exclude requester if they are also an approver
         approvers = [a for a in approvers if a.id != current_user.id]
-        
-        if not approvers:
-            debug_print("No approver found", payload.device_name)
-            raise HTTPException(400, "No approver available to approve request")
 
         if not approvers:
-            debug_print("No approvers found", payload.device_name)
-            raise HTTPException(400, "No approver available for this device")
+            return {
+                "ok": False,
+                "error": "No approver available to approve request",
+                "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
+            }
 
+        # Sending approval email for each approver
         for approver in approvers:
             debug_print("Approver resolved", {
                 "id": approver.id,
@@ -271,24 +278,24 @@ async def create_request(
                 "email": approver.email
             })
 
-            # Token + email
+            # Send approval email
             token = generate_email_approval_token(req.id, approver.id)
-            approval_link = f"{settings.backend_url}/api/requests/{req.id}/email-approve?token={token}"
-
+            approval_link = f"{settings.backend_url}/ui/requests/{req.id}/email-approve?token={token}"
             debug_print("Approval token", token)
             debug_print("Approval link", approval_link)
 
-            # send_approval_email(
-            #     approver.email,
-            #     req.device_name,
-            #     req.requester_username,
-            #     approval_link
-            # )
+            # Send email in background
+            background_tasks.add_task(
+                send_approval_email,
+                approver.email,
+                req.device_name,
+                req.requester_username,
+                approval_link
+            )
 
-        debug_print("Approval emails sent to all approvers")
-
-
+        # ---------------------------------------------------------
         # Log action
+        # ---------------------------------------------------------
         log_action(
             current_user,
             "breakglass_request",
@@ -297,14 +304,15 @@ async def create_request(
             category="breakglass",
         )
 
-        debug_print("Action logged")
-
         return {"ok": True, "request_id": req.id}
 
     except Exception as e:
         debug_error(e)
-        raise
-
+        return {
+            "ok": False,
+            "error": str(e),
+            "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
+        }
 
 @router.post("/requests/{req_id}/approve")
 async def approve_request(
@@ -314,16 +322,26 @@ async def approve_request(
     db: AsyncSession = Depends(get_db),
 ):
     roles = request.app.state.roles
-    if not has_permission(current_user.role, "approve_bg_account", roles):
+
+    # ---------------------------------------------------------
+    # Permission check (RBAC)
+    # ---------------------------------------------------------
+    can_approve = has_permission(current_user.role, "approve_bg_account", roles)
+    can_requester_otp = has_permission(current_user.role, "approve_bg_account_otp", roles)
+
+    if not (can_approve or can_requester_otp):
         log_action(
             current_user.username,
             "approve_bg_account",
-            f"Account Approval - Permission Denied",
+            "Account Approval - Permission Denied",
             request,
             category="breakglass",
         )
-        raise HTTPException(status_code=403, detail="Permission denied")
+        return {"ok": False, "error": "Permission denied"}
+
+    # ---------------------------------------------------------
     # Parse form or JSON
+    # ---------------------------------------------------------
     if request.headers.get("content-type", "").startswith("application/json"):
         payload = await request.json()
         otp_code = payload.get("otp_code")
@@ -335,62 +353,61 @@ async def approve_request(
         approver_username = form.get("approver_name")
         approve_reason = form.get("approve_reason")
 
-    if settings.debug == True:
+    if settings.debug:
         print(f"Backend code, approver, reason: {otp_code} {approver_username} {approve_reason}")
+
+    # ---------------------------------------------------------
     # Load request
+    # ---------------------------------------------------------
     stmt = select(BreakglassRequest).where(BreakglassRequest.id == req_id)
     result = await db.execute(stmt)
     req = result.scalar_one_or_none()
 
-    if settings.debug == True:
-        print(f"Request from DB: {req}")
     if not req:
-        if settings.debug == True:
-            print(f"request not found")
-        raise HTTPException(404, "Request not found")
+        return {"ok": False, "error": "Request not found"}
 
-    # Self-approval forbidden
-    if req.requester_id == current_user.id:
-        if not otp_code:
-            print(f"Can't approve own request")
-            raise HTTPException(400, "You cannot approve your own request")
+    # ---------------------------------------------------------
+    # Self-approval forbidden unless requester uses OTP
+    # ---------------------------------------------------------
+    if req.requester_id == current_user.id and not otp_code:
+        return {"ok": False, "error": "You cannot approve your own request"}
 
+    # ---------------------------------------------------------
     # OTP approval path
+    # ---------------------------------------------------------
     if otp_code:
-        # is_valid = await validate_otp_for_approver(request.app.state.config, db, approver_username, otp_code)
-        # if not is_valid:
-        #     raise HTTPException(400, "Invalid OTP code")
-
         # Load approver account
         stmt = select(Account).where(Account.username == approver_username)
         result = await db.execute(stmt)
         approver = result.scalar_one_or_none()
-        if settings.debug == True:
+
+        if settings.debug:
             print(f"Approver from DB: {approver}")
+
         if not approver:
-            return False
+            return {"ok": False, "error": "Approver not found"}
 
         # Load OTP secret from vault
         vault = VaultClient(request.app.state.config, tenant=approver.tenant)
         seed = await vault.get_otp_secret(approver.username)
-        if settings.debug == True:
+
+        if settings.debug:
             print(f"Account seed from vault: {seed}")
-        # print(f"Seed {seed["otp_seed"]}")
+
         if not seed:
-            # return False
-            # print(f"OTP secret not found")
-            raise HTTPException(400, "OTP secret not found")
+            return {"ok": False, "error": "OTP secret not found"}
 
         totp = pyotp.TOTP(seed["otp_seed"])
 
-        if settings.debug == True:
+        if settings.debug:
             print(f"TOTP: {totp}")
+
         if not totp.verify(otp_code):
-            if settings.debug == True:
-                print(f"Invalid TOP code")
-            raise HTTPException(400, "Invalid OTP code")
-        
-            
+            return {"ok": False, "error": "Invalid OTP code"}
+
+        # ---------------------------------------------------------
+        # Apply approval
+        # ---------------------------------------------------------
         req.status = "approved"
         req.approver_id = approver.id
         req.approver_username = approver.username
@@ -404,21 +421,18 @@ async def approve_request(
         log_action(
             current_user,
             "breakglass_approve_otp",
-            f"OTP approved request {req_id} for device {req.device_name}",
+            f"{approver.username} approved request {req.id} for device {req.device_name} (OTP)",
             request,
             category="breakglass",
         )
 
         return {"ok": True, "method": "otp"}
 
+    # ---------------------------------------------------------
     # Direct approval path
-    # if current_user.role not in ("approver", "requester_approver"):
-    #     raise HTTPException(403, "Forbidden")
-
+    # ---------------------------------------------------------
     if not current_user.otp_enabled:
-        if settings.debug == True:
-            print(f"No approver with OTP enabled")
-        raise HTTPException(400, "Direct approval requires OTP-enabled approver")
+        return {"ok": False, "error": "Direct approval requires OTP-enabled approver"}
 
     req.status = "approved"
     req.approver_id = current_user.id
@@ -433,12 +447,13 @@ async def approve_request(
     log_action(
         current_user,
         "breakglass_approve",
-        f"Approved request {req_id} for device {req.device_name}",
+        f"{current_user.username} approved request {req.id} for device {req.device_name} (direct)",
         request,
         category="breakglass",
     )
 
     return {"ok": True, "method": "direct"}
+
 
 @router.post("/requests/{req_id}/reject")
 async def reject_request(
@@ -501,37 +516,45 @@ async def email_approve_request(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    from core.security.email import validate_email_approval_token
-
+    # Validate token
     payload = validate_email_approval_token(token)
     if not payload:
-        raise HTTPException(400, "Invalid or expired approval token")
+        return {"ok": False, "error": "Invalid or expired approval token"}
 
     if payload["req_id"] != req_id:
-        raise HTTPException(400, "Token does not match request")
+        return {"ok": False, "error": "Token does not match request"}
 
     approver_id = payload["approver_id"]
 
+    # Load approver
     approver = await db.scalar(select(Account).where(Account.id == approver_id))
     if not approver:
-        raise HTTPException(404, "Approver not found")
+        return {"ok": False, "error": "Approver not found"}
 
+    # Load request
     req = await db.scalar(select(BreakglassRequest).where(BreakglassRequest.id == req_id))
     if not req:
-        raise HTTPException(404, "Request not found")
+        return {"ok": False, "error": "Request not found"}
 
+    # If request has been approved
+    if req.status != "pending":
+        return {"ok": False, "error": f"Request already {req.status}"}
+
+    # Prevent self-approval
     if req.requester_id == approver_id:
-        raise HTTPException(400, "Cannot approve your own request")
+        return {"ok": False, "error": "Cannot approve your own request"}
 
+    # Approve
     req.status = "approved"
     req.approver_id = approver_id
     req.approver_username = approver.username
     req.approve_reason = "Approved via email link"
-    req.approved_at = datetime.utcnow()
+    req.approved_at = datetime.now(timezone.utc).isoformat()
     req.approval_method = "email"
 
     await db.commit()
 
+    # Audit log
     log_action(
         approver,
         "breakglass_approve_email",
@@ -540,7 +563,8 @@ async def email_approve_request(
         category="breakglass",
     )
 
-    return {"ok": True, "method": "email"}
+    return {"ok": True, "method": "email", "approved_by": approver.username}
+
 
 @router.get("/requests/{req_id}/show-password")
 async def api_show_password(
@@ -549,9 +573,20 @@ async def api_show_password(
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    roles = request.app.state.roles
+
+    # ---------------------------------------------------------
+    # Permission check: requester must have request_bg_account
+    # ---------------------------------------------------------
+    if not has_permission(current_user.role, "request_bg_account", roles):
+        return {"ok": False, "error": "Permission denied"}
+
     config = request.app.state.config
     tenant = current_user.tenant
 
+    # ---------------------------------------------------------
+    # Load request
+    # ---------------------------------------------------------
     stmt = select(BreakglassRequest).where(BreakglassRequest.id == req_id)
     result = await db.execute(stmt)
     req = result.scalar_one_or_none()
@@ -559,13 +594,19 @@ async def api_show_password(
     if not req:
         return {"ok": False, "error": "Request not found"}
 
+    # Only requester can view password
     if req.requester_id != current_user.id:
         return {"ok": False, "error": "Forbidden"}
 
-    if req.status != "approved":
+    # Must be approved or used
+    if req.status not in ("approved", "used"):
         return {"ok": False, "error": "Request is not approved"}
 
+    # ---------------------------------------------------------
+    # Fetch password from Vault
+    # ---------------------------------------------------------
     vault = VaultClient(config, tenant=tenant)
+
     try:
         bgaccounts = await vault.get_breakglass_accounts()
     except Exception:
@@ -583,12 +624,27 @@ async def api_show_password(
     if not password:
         return {"ok": False, "error": "Password not available"}
 
+    # ---------------------------------------------------------
+    # Mark request as USED (credential exposed)
+    # ---------------------------------------------------------
+    if req.status != "used":
+        req.status = "used"
+        req.used_at = datetime.now(timezone.utc).isoformat()
+        await db.commit()
+        await db.refresh(req)
+
+    # ---------------------------------------------------------
+    # Return password
+    # ---------------------------------------------------------
     return {
         "ok": True,
         "password": password,
         "device": req.device_name,
         "username": username,
+        "status": req.status,
+        "used_at": req.used_at,
     }
+
 
 @router.get("/requests/{req_id}/copy-password")
 async def api_copy_password(
@@ -597,10 +653,20 @@ async def api_copy_password(
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
+    roles = request.app.state.roles
+
+    # ---------------------------------------------------------
+    # Permission check: requester must have request_bg_account
+    # ---------------------------------------------------------
+    if not has_permission(current_user.role, "request_bg_account", roles):
+        return {"ok": False, "error": "Permission denied"}
+
     config = request.app.state.config
     tenant = current_user.tenant
 
+    # ---------------------------------------------------------
     # Load request
+    # ---------------------------------------------------------
     stmt = select(BreakglassRequest).where(BreakglassRequest.id == req_id)
     result = await db.execute(stmt)
     req = result.scalar_one_or_none()
@@ -612,11 +678,13 @@ async def api_copy_password(
     if req.requester_id != current_user.id:
         return {"ok": False, "error": "Forbidden"}
 
-    # Must be approved
-    if req.status != "approved":
+    # Must be approved or used
+    if req.status not in ("approved", "used"):
         return {"ok": False, "error": "Request is not approved"}
 
+    # ---------------------------------------------------------
     # Fetch password from Vault
+    # ---------------------------------------------------------
     try:
         vault = VaultClient(config, tenant=tenant)
         bgaccounts = await vault.get_breakglass_accounts()
@@ -630,7 +698,129 @@ async def api_copy_password(
         return {"ok": False, "error": "Breakglass account not found"}
 
     password = bg.get("password")
+    username = bg.get("username")
+
     if not password:
         return {"ok": False, "error": "Password not available"}
 
-    return {"ok": True, "password": password}
+    # ---------------------------------------------------------
+    # Mark request as USED (credential exposed)
+    # ---------------------------------------------------------
+    if req.status != "used":
+        req.status = "used"
+        req.used_at = datetime.now(timezone.utc).isoformat()
+        await db.commit()
+        await db.refresh(req)
+
+    # ---------------------------------------------------------
+    # Return password
+    # ---------------------------------------------------------
+    return {
+        "ok": True,
+        "password": password,
+        "device": req.device_name,
+        "username": username,
+        "status": req.status,
+        "used_at": req.used_at,
+    }
+
+
+@router.post("/rotation-callback")
+async def rotation_callback(
+    payload: dict,
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+):
+    # Validate machine token
+    auth = request.headers.get("Authorization")
+    if auth != f"Bearer {settings.rotation_api_token}":
+        return {
+            "ok": False,
+            "error": "Unauthorized",
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        }
+
+    req_id = payload.get("req_id")
+    status = payload.get("status")
+    error = payload.get("error")
+
+    req = await db.scalar(select(BreakglassRequest).where(BreakglassRequest.id == req_id))
+    if not req:
+        return {
+            "ok": False,
+            "error": "Request not found",
+            "req_id": req_id,
+            "timestamp": datetime.utcnow().isoformat() + "Z"
+        }
+
+    req.rotation_status = status
+    req.rotation_error = error
+
+    # Set rotation_at only when rotation is finished
+    if status in ("success", "failed"):
+        req.rotation_at = datetime.utcnow().isoformat() + "Z"
+
+    await db.commit()
+
+    return {
+        "ok": True,
+        "req_id": req_id,
+        "rotation_status": status,
+        "rotation_error": error,
+        "rotation_at": req.rotation_at,
+        "timestamp": datetime.utcnow().isoformat() + "Z"
+    }
+
+
+@router.post("/requests/{req_id}/close")
+async def api_close_request(
+    req_id: int,
+    request: Request,
+    current_user: Account = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+):
+    roles = request.app.state.roles
+
+    # ---------------------------------------------------------
+    # Permission check
+    # ---------------------------------------------------------
+    if not has_permission(current_user.role, "request_bg_account", roles):
+        return {"ok": False, "error": "Permission denied"}
+
+    # ---------------------------------------------------------
+    # Load request
+    # ---------------------------------------------------------
+    stmt = select(BreakglassRequest).where(BreakglassRequest.id == req_id)
+    result = await db.execute(stmt)
+    req = result.scalar_one_or_none()
+
+    if not req:
+        return {"ok": False, "error": "Request not found"}
+
+    # Only requester can close
+    if req.requester_id != current_user.id:
+        return {"ok": False, "error": "Forbidden"}
+
+    # Only approved or used requests can be closed
+    if req.status not in ("approved", "used"):
+        return {"ok": False, "error": f"Cannot close request in status '{req.status}'"}
+
+    # ---------------------------------------------------------
+    # Update status → closed
+    # Queue rotation
+    # ---------------------------------------------------------
+    req.status = "closed"
+    req.rotation_status = "pending"
+    req.rotation_at = None
+    req.rotation_error = None
+
+    await db.commit()
+    await db.refresh(req)
+
+    return {
+        "ok": True,
+        "message": "Request closed and rotation queued",
+        "req_id": req.id,
+        "status": req.status,
+        "rotation_status": req.rotation_status,
+    }

@@ -14,6 +14,7 @@ from models.request import BreakglassRequest
 from core.settings import settings
 from datetime import datetime, timezone
 from core.utils import parse_iso8601
+from core.account_rotation import rotate_accounts_for_closed_requests
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import sessionmaker
 
@@ -27,14 +28,14 @@ from ui.routes import (
     devices as ui_devices,
     logs as ui_logs,
     request as ui_requests,
-    dashboard as ui_dashboard
+    dashboard as ui_dashboard,
+    account_rotation as ui_rotation_jobs
 )
 
 from core.config_loader import load_config
 from core.credential_loader import load_credentials
 from core.device_loader import load_devices
 from core.role_loader import load_roles
-from core.ssh_manager import SSHManager
 from fastapi.responses import RedirectResponse
 from fastapi.exceptions import RequestValidationError
 from core.debug import validation_exception_handler
@@ -78,16 +79,9 @@ async def seed_admin_user():
         await db.commit()
         print("✔ Admin user created: username=admin password=admin123")
 
-
-
-async def cleanup_expired_requests():
-    """
-    APScheduler job: expire all pending/approved requests whose end_time has passed.
-    Must create a NEW sessionmaker bound to engine (cannot use FastAPI dependency).
-    """
+async def cleanup_requests():
     now_dt = datetime.now(timezone.utc)
 
-    # Create a fresh sessionmaker bound to engine
     SchedulerSession = sessionmaker(
         engine,
         expire_on_commit=False,
@@ -97,7 +91,7 @@ async def cleanup_expired_requests():
     async with SchedulerSession() as db:
         result = await db.execute(
             select(BreakglassRequest).where(
-                BreakglassRequest.status.in_(["pending", "approved"])
+                BreakglassRequest.status.in_(["pending", "approved", "used", "closed"])
             )
         )
         rows = result.scalars().all()
@@ -106,19 +100,43 @@ async def cleanup_expired_requests():
 
         for r in rows:
             end_dt = parse_iso8601(r.end_time)
-            if end_dt is None or end_dt < now_dt:
-                if r.status != "expired":
+            if end_dt is None:
+                continue
+
+            if end_dt < now_dt:
+
+                # pending → expired
+                if r.status == "pending":
                     r.status = "expired"
                     changed = True
 
+                # approved → expired (never used)
+                elif r.status == "approved":
+                    r.status = "expired"
+                    changed = True
+
+                # used → closed → queue rotation
+                elif r.status == "used":
+                    r.status = "closed"
+                    r.rotation_status = "pending"
+                    r.rotation_at = None
+                    changed = True
+
+                # closed → queue rotation if not already queued
+                elif r.status == "closed":
+                    if r.rotation_status == "not_required":
+                        r.rotation_status = "pending"
+                        r.rotation_at = None
+                        changed = True
+
         if changed:
             await db.commit()
-            print("✔ Cleanup: expired requests updated")
-
+            print("✔ Cleanup: expired/closed requests updated")
 
 def start_scheduler():
     scheduler = AsyncIOScheduler()
-    scheduler.add_job(cleanup_expired_requests, "interval", minutes=1)
+    scheduler.add_job(cleanup_requests, "interval", minutes=1)
+    scheduler.add_job(rotate_accounts_for_closed_requests, "interval", minutes=1)
     scheduler.start()
     print("✔ APScheduler started")
 # ---------------------------------------------------------
@@ -134,8 +152,7 @@ async def startup():
     # Store loaders for later use
     app.state.credential_loader = load_credentials
     app.state.device_loader = load_devices
-    app.state.ssh_manager = SSHManager(app)
-
+    
     # Load roles
     app.state.roles = load_roles()
     print("✔ Loaded roles")
@@ -160,45 +177,6 @@ async def startup():
 
     print("✔ Startup complete (tenant-specific loading deferred)")
     start_scheduler()
-
-# @app.on_event("startup")
-# async def startup():
-#     # Load configuration
-#     app.state.config = load_config()
-#     # Load credentials (ENV → file fallback)
-#     creds = load_credentials(app.state.config)
-#     print("✔ Loaded credentials")
-
-#     # Merge credentials into config so Nagios loader can use them
-#     if "devices" in app.state.config and "nagios" in app.state.config["devices"]:
-#         if "nagios" in creds:
-#             app.state.config["devices"]["nagios"].update(creds["nagios"])
-#             print("✔ Merged Nagios credentials into config")
-
-#     # Store loader for later use if needed
-#     app.state.credential_loader = load_credentials
-#     app.state.ssh_manager = SSHManager(app)
-#     print("✔ Loaded configuration")
-
-#     app.state.roles = load_roles()
-
-#     # Create async HTTP client for UI → API calls
-#     app.state.http_client = httpx.AsyncClient()
-#     print("✔ HTTP client initialized")
-
-#     # Optional: preload devices at startup (still allowed)
-#     try:
-#         app.state.devices = await load_devices(app.state.config)
-#         print(f"✔ Loaded {len(app.state.devices)} devices")
-#     except Exception as e:
-#         print("⚠ Device load failed:", e)
-
-#     # Create tables
-#     async with engine.begin() as conn:
-#         await conn.run_sync(Base.metadata.create_all)
-
-#     # Seed admin user
-#     await seed_admin_user()
 
 
 # ---------------------------------------------------------
@@ -231,6 +209,7 @@ app.include_router(ui_devices.router)
 app.include_router(ui_logs.router)
 app.include_router(ui_requests.router)
 app.include_router(ui_dashboard.router)
+app.include_router(ui_rotation_jobs.router)
 
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 # ---------------------------------------------------------

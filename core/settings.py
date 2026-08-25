@@ -8,9 +8,15 @@ class Settings(BaseSettings):
     backend_url: str = "http://localhost:8000"
     database_url: str = "sqlite+aiosqlite:///./networkdevice.db"
     # later: "postgresql+asyncpg://user:pass@host/db"
-
+    
+    # Vault details
     vault_addr: str = "http://localhost:8200"
     vault_token: str = "changeme"
+
+    # Github or Ansible credential
+    rotation_api_url: str = "http://localhost"
+    rotation_api_token: str = "Secret to access github/ansible"
+    rotation_max_retries: int = 3
 
     # Email approval secret
     email_approval_secret: str = "Very Strong Secret Key Remember to change me"
@@ -21,6 +27,7 @@ class Settings(BaseSettings):
     smtp_user: str | None = None
     smtp_password: str | None = None
     email_from: str = "breakglass@example.com"
+    email_approval_domain: str = "http://localhost:8000"
 
     jwt_secret: str = "super-secret"
     jwt_algorithm: str = "HS256"

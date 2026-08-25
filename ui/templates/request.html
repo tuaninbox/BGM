@@ -18,148 +18,187 @@
     <tr>
       <th class="px-3 py-2 text-left w-26">Device</th>
       <th class="px-3 py-2 text-left w-26">Account</th>
-
       <th class="px-3 py-2 text-left w-[25%]">Requester</th>
       <th class="px-3 py-2 text-left w-[25%]">Approver</th>
-
       <th class="px-3 py-2 text-left w-26">Time Frame</th>
-
       <th class="px-3 py-2 text-left w-[20%]">Details</th>
-
-      <th class="px-3 py-2 text-left w-[25%]">Action</th>
+      <th class="px-3 py-2 text-left w-[20%]">Rotation</th>
+      <th class="px-3 py-2 text-left w-[25%]">Status</th>
     </tr>
   </thead>
 
   <tbody>
-    {% for r in requests %}
-    <tr class="border-b hover:bg-gray-50">
+{% for r in requests %}
+<tr class="border-b hover:bg-gray-50">
 
-      <!-- Device -->
-      <td class="px-3 py-2">{{ r.device_name }}</td>
+  <!-- Device -->
+  <td class="px-3 py-2">{{ r.device_name }}</td>
 
-      <!-- Account -->
-      <td class="px-3 py-2">{{ r.account_username }}</td>
+  <!-- Account -->
+  <td class="px-3 py-2">{{ r.account_username }}</td>
 
-      <!--  Requester -->
-      <td class="px-3 py-2">
-        <div><strong>{{ r.requester_username }}</strong></div>
+  <!-- Requester -->
+  <td class="px-3 py-2">
+    <div><strong>{{ r.requester_username }}</strong></div>
+    <div class="mt-1 text-xs text-gray-700">
+      <strong>Reason:</strong>
+      <p>{{ r.request_reason }}</p>
+    </div>
+  </td>
 
-        <div class="mt-1 text-xs text-gray-700">
-          <strong>Reason:</strong>
-          <p>{{ r.request_reason }}</p>
-        </div>
-      </td>
+  <!-- Approver -->
+  <td class="px-3 py-2">
+    {% if r.approver_username %}
+      <div><strong>{{ r.approver_username }}</strong></div>
 
-      <!-- Approver -->
-      <td class="px-3 py-2">
-        {% if r.approver_username %}
-          <div><strong>{{ r.approver_username }}</strong></div>
+      {% if r.approve_reason %}
+      <div class="mt-1 text-xs text-gray-700">
+        <strong>Reason:</strong>
+        <p>{{ r.approve_reason }}</p>
+      </div>
+      {% endif %}
+    {% else %}
+      <span class="text-xs text-gray-500">Not yet approved</span>
+    {% endif %}
+  </td>
 
-          {% if r.approve_reason %}
-          <div class="mt-1 text-xs text-gray-700">
-            <strong>Reason:</strong>
-            <p>{{ r.approve_reason }}</p>
-          </div>
-          {% endif %}
-        {% else %}
-          <span class="text-xs text-gray-500">Not yet approved</span>
+  <!-- Time Frame -->
+  <td class="px-3 py-2">
+    <div class="text-xs leading-tight">
+      <div><strong>{{ r.start_time }}</strong></div>
+      <div><strong>{{ r.end_time }}</strong></div>
+    </div>
+  </td>
+
+  <!-- Details -->
+  <td class="px-3 py-2 text-xs">
+    <div><strong>Created:</strong> {{ r.created_at }}</div>
+    <div><strong>Approved:</strong> {{ r.approved_at }}</div>
+    {% if r.used_at %}
+      <div><strong>Used:</strong> {{ r.used_at }}</div>
+    {% endif %}
+  </td>
+
+  <!-- Rotation -->
+  <td class="px-3 py-2 text-xs">
+    {% if r.rotation_status %}
+      <div>
+        <strong>Status:</strong>
+        {% if r.rotation_status == "queued" %}
+          <span class="px-2 py-1 bg-yellow-200 text-yellow-800 rounded">Queued</span>
+        {% elif r.rotation_status == "running" %}
+          <span class="px-2 py-1 bg-blue-200 text-blue-800 rounded">Running</span>
+        {% elif r.rotation_status == "success" %}
+          <span class="px-2 py-1 bg-green-200 text-green-800 rounded">Success</span>
+        {% elif r.rotation_status == "failed" %}
+          <span class="px-2 py-1 bg-red-200 text-red-800 rounded">Failed</span>
+        {% elif r.rotation_status == "pending" %}
+          <span class="px-2 py-1 bg-orange-200 text-orange-800 rounded">Pending</span>
+        {% elif r.rotation_status == "not_required" %}
+          <span class="px-2 py-1 bg-orange-200 text-orange-800 rounded">Not Required</span>
         {% endif %}
-      </td>
+      </div>
 
-      <!--  Time Frame -->
-      <td class="px-3 py-2">
-        <div class="text-xs leading-tight">
-          <div><strong>{{ r.start_time }}</strong></div>
-          <div><strong>{{ r.end_time }}</strong></div>
+      {% if r.rotation_error %}
+        <div class="mt-1 text-red-600">
+          <strong>Error:</strong>
+          <p>{{ r.rotation_error }}</p>
         </div>
-      </td>
+      {% endif %}
 
-      <!--  Details (Created + Approved At) -->
-      <td class="px-3 py-2 text-xs">
-        <div><strong>Created:</strong> {{ r.created_at }}</div>
-        <div><strong>Approved:</strong> {{ r.approved_at }}</div>
-      </td>
-
-      <!--  Action (unchanged) -->
-      <td class="px-3 py-2">
-        <div class="mb-1">
-          {% if r.status == "pending" %}
-            <span class="px-2 py-1 bg-yellow-200 text-yellow-800 rounded">Pending</span>
-          {% elif r.status == "approved" %}
-            <span class="px-2 py-1 bg-green-200 text-green-800 rounded">Approved</span>
-          {% elif r.status == "rejected" %}
-            <span class="px-2 py-1 bg-red-200 text-red-800 rounded">Rejected</span>
-          {% elif r.status == "expired" %}
-            <span class="px-2 py-1 bg-gray-200 text-gray-800 rounded">Expired</span>
-          {% endif %}
+      {% if r.rotation_at %}
+        <div class="mt-1 text-gray-700">
+          <strong>At:</strong>
+          <p>{{ r.rotation_at }}</p>
         </div>
+      {% endif %}
+    {% else %}
+      <span class="text-xs text-gray-500">No rotation yet</span>
+    {% endif %}
+  </td>
 
-        {% if r.approval_method %}
-          {% if r.approval_method == "direct" %}
-            <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">Direct</span>
-          {% elif r.approval_method == "otp" %}
-            <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">OTP</span>
-          {% elif r.approval_method == "email" %}
-            <span class="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">Email</span>
-          {% endif %}
-        {% endif %}
-        {% if r.status == "pending" %}
+  <!-- Action -->
+  <td class="px-3 py-2">
 
-          {% if current_user.role in ["approver", "requester_approver"] %}
-            {% if current_user.username != r.requester_username %}
+    <!-- Status badge -->
+    <div class="mb-1">
+      {% if r.status == "pending" %}
+        <span class="px-2 py-1 bg-yellow-200 text-yellow-800 rounded">Pending</span>
+      {% elif r.status == "approved" %}
+        <span class="px-2 py-1 bg-green-200 text-green-800 rounded">Approved</span>
+      {% elif r.status == "used" %}
+        <span class="px-2 py-1 bg-blue-200 text-blue-800 rounded">Used</span>
+      {% elif r.status == "rejected" %}
+        <span class="px-2 py-1 bg-red-200 text-red-800 rounded">Rejected</span>
+      {% elif r.status == "expired" %}
+        <span class="px-2 py-1 bg-gray-200 text-gray-800 rounded">Expired</span>
+      {% elif r.status == "closed" %}
+        <span class="px-2 py-1 bg-purple-200 text-purple-800 rounded">Closed</span>
+      {% endif %}
+    </div>
 
-              <!-- Direct approval -->
-              <button
-                class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
-                hx-get="/ui/requests/{{ r.id }}/approve-modal"
-                hx-target="#modal"
-                hx-swap="innerHTML">
-                Approve
-              </button>
+    <!-- Approval method badge -->
+    {% if r.approval_method %}
+      {% if r.approval_method == "direct" %}
+        <span class="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">APP</span>
+      {% elif r.approval_method == "otp" %}
+        <span class="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">OTP</span>
+      {% elif r.approval_method == "email" %}
+        <span class="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">Email</span>
+      {% endif %}
+    {% endif %}
 
-              <!-- Reject -->
-              <button
-                class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 ml-2"
-                hx-get="/ui/requests/{{ r.id }}/reject-modal"
-                hx-target="#modal"
-                hx-swap="innerHTML">
-                Reject
-              </button>
-
-            {% else %}
-              {% if current_user.role == "requester_approver" %}
-                <!-- OTP Approve -->
-                <button
-                  class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-                  hx-get="/ui/requests/{{ r.id }}/otp-modal"
+    <!-- Approve / Reject buttons -->
+    {% if r.status == "pending" %}
+      {% if current_user.role in ["approver", "requester_approver"] %}
+        {% if current_user.username != r.requester_username %}
+          <button class="bg-green-600 text-white px-3 py-1 rounded hover:bg-green-700"
+                  hx-get="/ui/requests/{{ r.id }}/approve-modal"
                   hx-target="#modal"
                   hx-swap="innerHTML">
-                  OTP Approve
-                </button>
-              {% else %}
-                <p class="text-xs text-red-600">Cannot approve your own request</p>
-              {% endif %}
-            {% endif %}
-          {% endif %}
+            Approve
+          </button>
 
-          {% if current_user.role == "requester" or current_user.role == "requester_approver" and current_user.username == r.requester %}
-            <!-- OTP Approve -->
-            <button
-              class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-              hx-get="/ui/requests/{{ r.id }}/otp-modal"
-              hx-target="#modal"
-              hx-swap="innerHTML">
+          <button class="bg-red-600 text-white px-3 py-1 rounded hover:bg-red-700 ml-2"
+                  hx-get="/ui/requests/{{ r.id }}/reject-modal"
+                  hx-target="#modal"
+                  hx-swap="innerHTML">
+            Reject
+          </button>
+          {% endif %}
+        {% elif current_user.role in ["requester", "requester_approver"] %}
+         {% if current_user.username == r.requester_username %}
+            <button class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+                    hx-get="/ui/requests/{{ r.id }}/otp-modal"
+                    hx-target="#modal"
+                    hx-swap="innerHTML">
               OTP Approve
             </button>
-          {% endif %}
+           {% endif %}
+        {% else %}
+            <p class="text-xs text-red-600">Cannot approve your own request</p>
+      {% endif %}
+    {% endif %}
 
-        {% endif %}
-      </td>
+    <!-- Close button (only requester, only when approved or used) -->
+    {% if current_user.username == r.requester_username and r.status in ["approved", "used"] %}
+      <button
+        class="bg-purple-600 text-white px-3 py-1 rounded hover:bg-purple-700 mt-2"
+        hx-post="/ui/requests/{{ r.id }}/close"
+        hx-target="#modal"
+        hx-swap="innerHTML">
+        Close Request
+      </button>
+    {% endif %}
 
-    </tr>
-    {% endfor %}
-  </tbody>
+  </td>
+
+</tr>
+{% endfor %}
+</tbody>
+
 </table>
+
 
 </div></div>
 

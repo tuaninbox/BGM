@@ -26,16 +26,25 @@ async def api_approval_requests(
     requester: str | None = None,
     approver: str | None = None,
     method: str | None = None,
+    rotation: str | None = None, 
     db: AsyncSession = Depends(get_db),
     current_user: Account = Depends(get_current_user),
 ):
+    # Permission check
     if current_user.role not in ("approver", "requester_approver"):
         return {"error": "Forbidden"}
 
     stmt = select(BreakglassRequest)
 
+    # Request status filter
     if status:
         stmt = stmt.where(BreakglassRequest.status == status)
+
+    # Rotation status filter
+    if rotation:
+        stmt = stmt.where(BreakglassRequest.rotation_status == rotation)
+
+    # Other filters
     if device:
         stmt = stmt.where(BreakglassRequest.device_name.ilike(f"%{device}%"))
     if account:
@@ -47,9 +56,11 @@ async def api_approval_requests(
     if method:
         stmt = stmt.where(BreakglassRequest.approval_method == method)
 
+    # Execute query
     result = await db.execute(stmt.order_by(BreakglassRequest.created_at.desc()))
     requests = result.scalars().all()
 
+    # Return full JSON including rotation fields
     return {
         "requests": [
             {
@@ -72,8 +83,16 @@ async def api_approval_requests(
                 "created_at": r.created_at,
                 "approved_at": r.approved_at,
 
+                # Request status
                 "status": r.status,
+
+                # Approval method
                 "approval_method": r.approval_method,
+
+                # Rotation fields
+                "rotation_status": r.rotation_status,
+                "rotation_at": r.rotation_at,
+                "rotation_error": r.rotation_error,
             }
             for r in requests
         ]

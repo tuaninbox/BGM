@@ -12,9 +12,11 @@ from core.security import verify_password, hash_password
 from models.account import Account
 from core.audit_logger import log_action
 from core.settings import settings
+from core.permissions import has_permission
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="ui/templates")
+templates.env.globals["has_permission"] = has_permission
 templates.env.cache.clear()
 
 async def count_admins(db: AsyncSession) -> int:

@@ -19,3 +19,6 @@ class BreakglassRequestUpdate(BaseModel):
     approver_username: str | None = None
     approve_reason: str | None = None
     status: str | None = None
+    rotation_status: str | None = None
+    rotation_error: str | None = None
+    rotation_at: datetime | None = None

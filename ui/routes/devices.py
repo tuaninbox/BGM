@@ -13,9 +13,11 @@ from models.account import Account
 from core.device_loader import load_devices
 from core.audit_logger import log_action
 from core.settings import settings
+from core.permissions import has_permission
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="ui/templates")
+templates.env.globals["has_permission"] = has_permission
 templates.env.cache.clear()
 
 @router.get("/devices", response_class=HTMLResponse)

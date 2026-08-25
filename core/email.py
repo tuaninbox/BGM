@@ -7,31 +7,17 @@ import hashlib
 import base64
 import json
 from datetime import datetime, timedelta, timezone
+from models.request import BreakglassRequest
+from core.db import AsyncSession
 
 
 from core.settings import settings
 from core.audit_logger import log_action
+from core.settings import settings
 
 
 logger = logging.getLogger("email")
-
-
-
-from core.settings import settings
-
 SECRET_KEY = settings.email_approval_secret
-
-# async def get_approvers(db: AsyncSession, requester_id: int):
-#     # Get all approvers
-#     result = await db.execute(
-#         select(Account).where(Account.role == "approver")
-#     )
-#     approvers = result.scalars().all()
-
-#     # Exclude requester if they are also an approver
-#     approvers = [a for a in approvers if a.id != requester_id]
-
-#     return approvers
 
 def generate_email_approval_token(req_id: int, approver_id: int):
     exp_ts = int((datetime.now(timezone.utc) + timedelta(minutes=10)).timestamp())
@@ -93,7 +79,19 @@ Approve here:
 
 This link expires in 10 minutes.
 """
-    send_email(to=approver_email, subject="Breakglass Approval Needed", body=body)
+    # send_email(to=approver_email, subject="Breakglass Approval Needed", body=body)
+    simulate_send_email(to=approver_email, subject="Breakglass Approval Needed", body=body)
+
+def simulate_send_email(to: str, subject: str, body: str, html_body: str | None = None):
+    print("------------------------------------------------------------")
+    print("📧 EMAIL DEBUG OUTPUT")
+    print("To:", to)
+    print("Subject:", subject)
+    print("Body:", body)
+    if html_body:
+        print("HTML Body:", html_body)
+    print("------------------------------------------------------------")
+
 
 
 def normalize_user(user):
@@ -167,6 +165,32 @@ async def send_email(to: str, subject: str, body: str, request=None, user=None):
 
         raise
 
+async def send_email_approval_links(req: BreakglassRequest, db: AsyncSession):
+    # Get all approvers
+    result = await db.execute(
+        select(Account).where(
+            Account.role.in_(["approver", "requester_approver"]),
+            Account.otp_enabled == True
+        )
+    )
+    approvers = result.scalars().all()
+
+    # Exclude requester
+    approvers = [a for a in approvers if a.id != req.requester_id]
+
+    if not approvers:
+        return
+
+    for approver in approvers:
+        token = generate_email_approval_token(req.id, approver.id)
+        approval_link = f"{settings.email_approval_domain}/api/requests/{req.id}/email-approve?token={token}"
+
+        send_approval_email(
+            approver.email,
+            req.device_name,
+            req.requester_username,
+            approval_link
+        )
 
 async def main():
     """

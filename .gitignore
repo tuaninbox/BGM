@@ -82,3 +82,5 @@ DS_Store
 # User files
 *.db
 credentials
+approle_id
+approle_secretid

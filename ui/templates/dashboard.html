@@ -5,25 +5,179 @@
 <div class="w-full px-4">
   <h1 class="text-2xl font-bold mb-6 text-center">Approval Dashboard</h1>
 
-  <!-- Summary cards -->
-  <div class="grid grid-cols-1 md:grid-cols-4 gap-4 text-sm mb-6">
-    <div class="bg-white border rounded shadow p-4">
-      <p class="font-semibold text-gray-700">Pending</p>
-      <p class="text-2xl font-bold text-yellow-600">{{ stats.pending }}</p>
-    </div>
-    <div class="bg-white border rounded shadow p-4">
-      <p class="font-semibold text-gray-700">Approved</p>
-      <p class="text-2xl font-bold text-green-600">{{ stats.approved }}</p>
-    </div>
-    <div class="bg-white border rounded shadow p-4">
-      <p class="font-semibold text-gray-700">Rejected</p>
-      <p class="text-2xl font-bold text-red-600">{{ stats.rejected }}</p>
-    </div>
-    <div class="bg-white border rounded shadow p-4">
-      <p class="font-semibold text-gray-700">Expired</p>
-      <p class="text-2xl font-bold text-gray-600">{{ stats.expired }}</p>
-    </div>
+  <!--- Summary Card - Request -->
+  <div class="grid grid-cols-1 md:grid-cols-7 gap-4 text-sm mb-6">
+
+  <!-- Total -->
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"status": "", "rotation": ""}'
+       hx-on="click: 
+          document.querySelector('select[name=status]').value='';
+          document.querySelector('select[name=rotation]').value='';
+       ">
+    <p class="font-semibold text-gray-700">Total Requests</p>
+    <p class="text-2xl font-bold text-blue-700">{{ stats.total }}</p>
   </div>
+
+  <!-- Pending -->
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"status": "pending"}'
+       hx-on="click:
+          document.querySelector('select[name=status]').value='pending';
+       ">
+    <p class="font-semibold text-gray-700">Pending</p>
+    <p class="text-2xl font-bold text-yellow-600">{{ stats.pending }}</p>
+  </div>
+
+  <!-- Approved -->
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"status": "approved"}'
+       hx-on="click:
+          document.querySelector('select[name=status]').value='approved';
+       ">
+    <p class="font-semibold text-gray-700">Approved</p>
+    <p class="text-2xl font-bold text-green-600">{{ stats.approved }}</p>
+  </div>
+
+  <!-- Used -->
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"status": "used"}'
+       hx-on="click:
+          document.querySelector('select[name=status]').value='used';
+       ">
+    <p class="font-semibold text-gray-700">Used</p>
+    <p class="text-2xl font-bold text-blue-600">{{ stats.used }}</p>
+  </div>
+
+  <!-- Closed -->
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"status": "closed"}'
+       hx-on="click:
+          document.querySelector('select[name=status]').value='closed';
+       ">
+    <p class="font-semibold text-gray-700">Closed</p>
+    <p class="text-2xl font-bold text-purple-600">{{ stats.closed }}</p>
+  </div>
+
+  <!-- Rejected -->
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"status": "rejected"}'
+       hx-on="click:
+          document.querySelector('select[name=status]').value='rejected';
+       ">
+    <p class="font-semibold text-gray-700">Rejected</p>
+    <p class="text-2xl font-bold text-red-600">{{ stats.rejected }}</p>
+  </div>
+
+  <!-- Expired -->
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"status": "expired"}'
+       hx-on="click:
+          document.querySelector('select[name=status]').value='expired';
+       ">
+    <p class="font-semibold text-gray-700">Expired</p>
+    <p class="text-2xl font-bold text-gray-600">{{ stats.expired }}</p>
+  </div>
+
+</div>
+
+<!--- Rotation Summary Cards-->
+<div class="grid grid-cols-1 md:grid-cols-6 gap-4 text-sm mb-6">
+
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"rotation": "not_required"}'
+       hx-on="click:
+          document.querySelector('select[name=rotation]').value='not_required';
+       ">
+    <p class="font-semibold text-gray-700">Rotation: Not Required</p>
+    <p class="text-2xl font-bold text-gray-600">{{ rotation_stats.not_required }}</p>
+  </div>
+
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"rotation": "pending"}'
+       hx-on="click:
+          document.querySelector('select[name=rotation]').value='pending';
+       ">
+    <p class="font-semibold text-gray-700">Rotation: Pending</p>
+    <p class="text-2xl font-bold text-orange-600">{{ rotation_stats.pending }}</p>
+  </div>
+
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"rotation": "queued"}'
+       hx-on="click:
+          document.querySelector('select[name=rotation]').value='queued';
+       ">
+    <p class="font-semibold text-gray-700">Rotation: Queued</p>
+    <p class="text-2xl font-bold text-yellow-600">{{ rotation_stats.queued }}</p>
+  </div>
+
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"rotation": "running"}'
+       hx-on="click:
+          document.querySelector('select[name=rotation]').value='running';
+       ">
+    <p class="font-semibold text-gray-700">Rotation: Running</p>
+    <p class="text-2xl font-bold text-blue-600">{{ rotation_stats.running }}</p>
+  </div>
+
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"rotation": "success"}'
+       hx-on="click:
+          document.querySelector('select[name=rotation]').value='success';
+       ">
+    <p class="font-semibold text-gray-700">Rotation: Success</p>
+    <p class="text-2xl font-bold text-green-600">{{ rotation_stats.success }}</p>
+  </div>
+
+  <div class="bg-white border rounded shadow p-4 cursor-pointer"
+       hx-get="/ui/approval/dashboard"
+       hx-target="#approver-table"
+       hx-swap="outerHTML"
+       hx-vals='{"rotation": "failed"}'
+       hx-on="click:
+          document.querySelector('select[name=rotation]').value='failed';
+       ">
+    <p class="font-semibold text-gray-700">Rotation: Failed</p>
+    <p class="text-2xl font-bold text-red-600">{{ rotation_stats.failed }}</p>
+  </div>
+
+</div>
 
   <!-- Filters -->
   <!-- <form
@@ -67,27 +221,62 @@
       <label class="block text-xs font-semibold text-gray-600">Approval Method</label>
       <select name="method" class="border rounded px-2 py-1" hx-trigger="change">
         <option value="">All</option>
-        <option value="direct" {% if method == "direct" %}selected{% endif %}>Direct</option>
+        <option value="direct" {% if method == "direct" %}selected{% endif %}>APP</option>
         <option value="otp" {% if method == "otp" %}selected{% endif %}>OTP</option>
         <option value="email" {% if method == "email" %}selected{% endif %}>Email</option>
       </select>
     </div>
-
+    
+    <!-- Rotation Filter -->
+    <div>
+      <label class="block text-xs font-semibold text-gray-600">Rotation</label>
+      <select name="rotation" class="border rounded px-2 py-1" hx-trigger="change">
+        <option value="">All</option>
+        <option value="not_required" {% if rotation == "not_required" %}selected{% endif %}>Not Required</option>
+        <option value="pending"      {% if rotation == "pending" %}selected{% endif %}>Pending</option>
+        <option value="queued"       {% if rotation == "queued" %}selected{% endif %}>Queued</option>
+        <option value="running"      {% if rotation == "running" %}selected{% endif %}>Running</option>
+        <option value="success"      {% if rotation == "success" %}selected{% endif %}>Success</option>
+        <option value="failed"       {% if rotation == "failed" %}selected{% endif %}>Failed</option>
+      </select>
+    </div>
+    
+    <!-- Status Filter -->
     <div>
       <label class="block text-xs font-semibold text-gray-600">Status</label>
       <select name="status" class="border rounded px-2 py-1" hx-trigger="change">
         <option value="">All</option>
-        <option value="pending" {% if status == "pending" %}selected{% endif %}>Pending</option>
+        <option value="pending"  {% if status == "pending" %}selected{% endif %}>Pending</option>
         <option value="approved" {% if status == "approved" %}selected{% endif %}>Approved</option>
+        <option value="used"     {% if status == "used" %}selected{% endif %}>Used</option>
+        <option value="closed"   {% if status == "closed" %}selected{% endif %}>Closed</option>
         <option value="rejected" {% if status == "rejected" %}selected{% endif %}>Rejected</option>
-        <option value="expired" {% if status == "expired" %}selected{% endif %}>Expired</option>
+        <option value="expired"  {% if status == "expired" %}selected{% endif %}>Expired</option>
       </select>
     </div>
+<button
+  type="button"
+  class="bg-gray-200 text-gray-700 px-3 py-1 rounded hover:bg-gray-300"
+  hx-get="/ui/approval/dashboard"
+  hx-target="#approver-table"
+  hx-swap="outerHTML"
+  hx-vals='{"status": "", "rotation": "", "device": "", "account": "", "requester": "", "approver": "", "method": ""}'
+  hx-on="click:
+    document.querySelector('select[name=status]').value='';
+    document.querySelector('select[name=rotation]').value='';
+    document.querySelector('input[name=device]').value='';
+    document.querySelector('input[name=account]').value='';
+    document.querySelector('input[name=requester]').value='';
+    document.querySelector('input[name=approver]').value='';
+    document.querySelector('select[name=method]').value='';
+  ">
+  Clear Filters
+</button>
 
-    <!-- <button class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700">
-      Filter
-    </button> -->
-  </form>
+    
+
+</form>
+
 
   <!-- Table -->
  {% include "partials/approval_table.html" %}

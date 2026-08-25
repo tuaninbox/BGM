@@ -92,8 +92,8 @@ async def list_devices(
                 # -------------------------------
                 active_request = None
                 for r in rows:
-                    if settings.debug:
-                        print(f"api/inventory/listdevices - request: {r}")
+                    # if settings.debug:
+                    #     print(f"api/inventory/listdevices - request: {r}")
                     end_dt = parse_iso8601(r.end_time)
                     if end_dt and end_dt >= now_dt:
                         active_request = r
@@ -112,8 +112,8 @@ async def list_devices(
                         "requester_username": active_request.requester_username,
                         "approver_username": active_request.approver_username,
                     }
-                if settings.debug:
-                    print(f"api/inventory/listdevices - request_info: {request_info}")
+                # if settings.debug:
+                #     print(f"api/inventory/listdevices - request_info: {request_info}")
                 merged_devices.append({
                     **dev,
                     "username": username,
@@ -138,8 +138,8 @@ async def list_devices(
             result = await db.execute(stmt)
             approver_count = len(result.scalars().all())
             has_approver = approver_count > 0
-            if settings.debug:
-                print(f"api/inventory/listdevices - merged devices: {merged_devices}")
+            # if settings.debug:
+            #     print(f"api/inventory/listdevices - merged devices: {merged_devices}")
             return {
                 "ok": True,
                 "count": len(devices),

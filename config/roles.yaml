@@ -6,16 +6,32 @@ roles:
     - update_accounts
     - delete_accounts
     - read_logs
+    - read_background_jobs
 
   requester_approver:
+    - read_self_account
+    - update_self_account
+    - read_devices
+    - read_requests
     - request_bg_account
     - approve_bg_account
     - create_otp
-
+    - access_dashboard
+    - read_background_jobs
 
   approver:
+    - read_self_account
+    - update_self_account
+    - read_devices
+    - read_requests
     - approve_bg_account
     - create_otp
+    - access_dashboard
 
   requester:
+    - read_self_account
+    - update_self_account
+    - read_devices
+    - read_requests
     - request_bg_account
+    - approve_bg_account_otp

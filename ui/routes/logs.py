@@ -10,9 +10,11 @@ from core.audit_logger import log_action
 from core.settings import settings
 from datetime import datetime
 from zoneinfo import ZoneInfo
+from core.permissions import has_permission
 
 router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="ui/templates")
+templates.env.globals["has_permission"] = has_permission
 templates.env.cache.clear()
 
 api_base_url = settings.backend_url  # Use the backend URL from settings
