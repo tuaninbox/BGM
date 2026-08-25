@@ -1,0 +1,247 @@
+<!-- Pagination + Page Size -->
+<div class="flex justify-end items-center mb-4 px-4">
+
+  <!-- RIGHT GROUP: Page Size (left) + Pagination (right) -->
+  <div class="flex items-center gap-6">
+
+    <!-- Page Size (LEFT inside right group) -->
+    <div class="flex items-center gap-2">
+      <label class="text-sm text-gray-700 font-medium">Page Size:</label>
+
+      <select
+        id="page-size-select"
+        class="border rounded px-2 py-1 text-sm"
+        name="page_size"
+        onchange="
+          if (this.value === 'custom') {
+            document.getElementById('page-size-custom').classList.remove('hidden');
+          } else {
+            document.getElementById('page-size-custom').classList.add('hidden');
+            htmx.ajax(
+              'GET',
+              '/ui/devices?page={{ page }}&page_size=' + this.value +
+              '&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}',
+              { target: '#devices-table', swap: 'innerHTML' }
+            );
+          }
+        "
+      >
+        {% for size in [10,20,50,100] %}
+          <option value="{{ size }}" {% if page_size == size %}selected{% endif %}>{{ size }}</option>
+        {% endfor %}
+        <option value="custom" {% if page_size not in [10,20,50,100] %}selected{% endif %}>Custom…</option>
+      </select>
+
+      <input
+        id="page-size-custom"
+        type="number"
+        min="1"
+        max="500"
+        name="page_size"
+        value="{{ page_size }}"
+        class="border rounded px-2 py-1 w-20 text-sm {% if page_size in [10,20,50,100] %}hidden{% endif %}"
+        hx-get="/ui/devices"
+        hx-target="#devices-table"
+        hx-swap="innerHTML"
+        hx-trigger="change"
+        hx-include="[name=sort_by],[name=sort_dir],[name=page]"
+      />
+    </div>
+
+    <!-- Pagination (RIGHT inside right group) -->
+    <div class="flex items-center gap-3">
+      {% if page > 1 %}
+        <button
+          hx-get="/ui/devices?page={{ page - 1 }}&page_size={{ page_size }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}"
+          hx-target="#devices-table"
+          hx-swap="innerHTML"
+          class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
+        >Previous</button>
+      {% else %}
+        <span class="px-3 py-1 bg-gray-100 text-gray-400 rounded">Previous</span>
+      {% endif %}
+
+      <span class="text-sm text-gray-600">
+        Page {{ page }} of {{ (total // page_size) + (1 if total % page_size else 0) }}
+      </span>
+
+      {% if page * page_size < total %}
+        <button
+          hx-get="/ui/devices?page={{ page + 1 }}&page_size={{ page_size }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}"
+          hx-target="#devices-table"
+          hx-swap="innerHTML"
+          class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
+        >Next</button>
+      {% else %}
+        <span class="px-3 py-1 bg-gray-100 text-gray-400 rounded">Next</span>
+      {% endif %}
+    </div>
+
+  </div>
+
+</div>
+
+
+<!-- TABLE -->
+<div class="w-full px-4">
+<div class="border rounded bg-white p-4">
+<!-- <div class="overflow-auto max-h-[75vh]"> -->
+<div class="overflow-auto max-h-[75vh] relative">
+
+
+<table class="min-w-full border-collapse table-fixed">
+  <!-- <table class="min-w-full border-collapse table-fixed w-full block"> -->
+
+  <thead class="bg-gray-100 border-b sticky top-0 z-20 shadow-sm">
+    <tr>
+
+      <!-- Device -->
+      <th class="px-3 py-2 text-left">
+        <a hx-get="/ui/devices?page={{ page }}&page_size={{ page_size }}&sort_by=name&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
+           hx-target="#devices-table"
+           hx-swap="innerHTML"
+           class="hover:underline cursor-pointer">
+          Device
+          {% if sort_by == "name" %}
+            {{ '↑' if sort_dir == 'asc' else '↓' }}
+          {% endif %}
+        </a>
+      </th>
+
+      <!-- IP -->
+      <th class="px-3 py-2 text-left">
+        <a hx-get="/ui/devices?page={{ page }}&page_size={{ page_size }}&sort_by=ip&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
+           hx-target="#devices-table"
+           hx-swap="innerHTML"
+           class="hover:underline cursor-pointer">
+          IP
+          {% if sort_by == "ip" %}
+            {{ '↑' if sort_dir == 'asc' else '↓' }}
+          {% endif %}
+        </a>
+      </th>
+
+      <!-- OS -->
+      <th class="px-3 py-2 text-left">
+        <a hx-get="/ui/devices?page={{ page }}&page_size={{ page_size }}&sort_by=os&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
+           hx-target="#devices-table"
+           hx-swap="innerHTML"
+           class="hover:underline cursor-pointer">
+          OS
+          {% if sort_by == "os" %}
+            {{ '↑' if sort_dir == 'asc' else '↓' }}
+          {% endif %}
+        </a>
+      </th>
+
+      <!-- Location -->
+      <th class="px-3 py-2 text-left">
+        <a hx-get="/ui/devices?page={{ page }}&page_size={{ page_size }}&sort_by=location&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
+           hx-target="#devices-table"
+           hx-swap="innerHTML"
+           class="hover:underline cursor-pointer">
+          Location
+          {% if sort_by == "location" %}
+            {{ '↑' if sort_dir == 'asc' else '↓' }}
+          {% endif %}
+        </a>
+      </th>
+
+      <!-- Breakglass -->
+      <th class="px-3 py-2 text-left">Breakglass Account</th>
+
+      <!-- Action -->
+      <th class="px-3 py-2 text-left">Action</th>
+
+    </tr>
+  </thead>
+
+  <tbody>
+    {% for d in devices %}
+    <tr class="border-b hover:bg-gray-50">
+
+      <td class="px-3 py-2">{{ d.name }}</td>
+      <td class="px-3 py-2">{{ d.ip }}</td>
+      <td class="px-3 py-2">{{ d.os }}</td>
+      <td class="px-3 py-2">{{ d.location }}</td>
+
+      <td class="px-3 py-2">
+        {% if d.username %}
+          {{ d.username }}
+        {% else %}
+          <span class="text-gray-500">None</span>
+        {% endif %}
+      </td>
+
+      <td class="px-3 py-2">
+
+        {% if d.request and d.request.status in ["pending", "approved"] %}
+
+          {% if d.request.status == "pending" %}
+            <span class="text-yellow-700 bg-yellow-100 px-2 py-1 rounded text-xs">
+              Pending Approval
+            </span>
+            <p class="text-xs text-gray-600 mb-2">
+              pending until {{ d.request.end_time }}
+            </p>
+
+          {% elif d.request.status == "approved" %}
+            <div id="pwbox-{{ d.request.id }}">
+              <span class="text-green-700 bg-green-100 px-2 py-1 rounded text-xs">
+                Approved
+              </span>
+              <span class="text-xs text-gray-600 mb-2">
+                by {{ d.request.approver_username }}
+              </span>
+              <p class="text-xs text-gray-600 mb-2">
+                Active until {{ d.request.end_time }}
+              </p>
+            </div>
+
+            <button
+              class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 mr-2"
+              type="button"
+              onclick="copyBreakglassPassword({{ d.request.id }})">
+              Copy Password
+            </button>
+
+            <button
+              class="bg-gray-700 text-white px-3 py-1 rounded hover:bg-gray-800"
+              hx-get="/ui/requests/{{ d.request.id }}/show-password"
+              hx-target="#modal"
+              hx-swap="innerHTML">
+              Show Password
+            </button>
+
+          {% endif %}
+
+        {% else %}
+
+          {% if current_user.role in ["requester", "requester_approver"] %}
+            <button
+              class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
+              hx-get="/ui/requests/create-modal/{{ d.name }}"
+              hx-target="#modal"
+              hx-swap="innerHTML">
+              Request Access
+            </button>
+          {% else %}
+            <button
+              class="bg-gray-400 text-white px-3 py-1 rounded cursor-not-allowed"
+              disabled>
+              Request Access
+            </button>
+            <p class="text-xs text-red-600 mt-1">You do not have permission</p>
+          {% endif %}
+
+        {% endif %}
+
+      </td>
+
+    </tr>
+    {% endfor %}
+  </tbody>
+
+</table>
+
+</div></div></div>

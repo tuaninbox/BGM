@@ -1,7 +1,7 @@
 tenants:
   NCP:
     devices:
-      source: "file"   # nagios or "file"
+      source: "file"   # netbox or nagios or "file"
 
       inventory_file: "devices.csv"
 
@@ -9,6 +9,11 @@ tenants:
         hostgroups:
           - ConfigBackup_ios
           - ConfigBackup_nxos
+      
+      netbox:
+        netbox_host: "netbox.example.com"
+        netbox_token: "YOUR_NETBOX_TOKEN"
+
 
     credentials: # Credential file to access devices, usually tacacs cred
       credential_file: credentials

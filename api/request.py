@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Request, Depends, Form, HTTPException, BackgroundTasks
 from fastapi.responses import HTMLResponse
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.ext.asyncio import AsyncSession
 from datetime import datetime, timedelta, timezone
 from core.db import get_db
@@ -20,39 +20,132 @@ import pyotp
 
 router = APIRouter(prefix="/api", tags=["accounts"])
 
+# Requests without pagination
+# @router.get("/requests")
+# async def list_requests(
+#     request: Request,
+#     db: AsyncSession = Depends(get_db),
+#     current_user: Account = Depends(get_current_user),
+# ):
+#     roles = request.app.state.roles
+
+#     # ---------------------------------------------------------
+#     # RBAC: user must have read_requests permission
+#     # ---------------------------------------------------------
+#     if not has_permission(current_user.role, "read_requests", roles):
+#         return {"ok": False, "error": "Permission denied"}
+
+#     # ---------------------------------------------------------
+#     # Fetch all requests
+#     # ---------------------------------------------------------
+#     result = await db.execute(select(BreakglassRequest))
+#     requests = result.scalars().all()
+
+#     total = len(requests)
+#     response = []
+
+#     for r in requests:
+#         # Fetch requester username
+#         requester = await db.get(Account, r.requester_id)
+#         requester_username = requester.username if requester else None
+
+#         # Fetch approver username (may be None)
+#         approver_username = None
+#         if r.approver_id:
+#             approver = await db.get(Account, r.approver_id)
+#             approver_username = approver.username if approver else None
+
+#         response.append({
+#             "id": r.id,
+#             "device_name": r.device_name,
+#             "account_username": r.account_username,
+
+#             "requester_id": r.requester_id,
+#             "requester_username": requester_username,
+
+#             "approver_id": r.approver_id,
+#             "approver_username": approver_username,
+
+#             "request_reason": r.request_reason,
+#             "approve_reason": r.approve_reason,
+
+#             # Time window
+#             "start_time": to_local_time(r.start_time) if r.start_time else None,
+#             "end_time": to_local_time(r.end_time) if r.end_time else None,
+
+#             # Status
+#             "status": r.status,
+
+#             # Timestamps
+#             "created_at": to_local_time(r.created_at) if r.created_at else None,
+#             "approved_at": to_local_time(r.approved_at) if r.approved_at else None,
+
+#             # Approval method: direct / otp / email
+#             "approval_method": r.approval_method,
+
+#             # ---------------------------------------------------------
+#             # Rotation information
+#             # ---------------------------------------------------------
+#             "rotation_status": r.rotation_status,     # queued / running / success / failed
+#             "rotation_error": r.rotation_error,       # error message or None
+#             "rotation_at": to_local_time(r.rotation_at) if r.rotation_at else None,
+#         })
+
+#     return {"ok": True, "requests": response, "total": total}
 
 @router.get("/requests")
 async def list_requests(
     request: Request,
     db: AsyncSession = Depends(get_db),
     current_user: Account = Depends(get_current_user),
+    page: int = 1,
+    page_size: int = 20,
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
 ):
     roles = request.app.state.roles
 
-    # ---------------------------------------------------------
-    # RBAC: user must have read_requests permission
-    # ---------------------------------------------------------
+    # RBAC
     if not has_permission(current_user.role, "read_requests", roles):
         return {"ok": False, "error": "Permission denied"}
 
-    # ---------------------------------------------------------
-    # Fetch all requests
-    # ---------------------------------------------------------
-    result = await db.execute(select(BreakglassRequest))
+    # ---- validate sort_by ----
+    valid_sort_fields = {
+        "device_name": BreakglassRequest.device_name,
+        "account_username": BreakglassRequest.account_username,
+        # requester/approver username are via Account, so we sort by IDs here
+        "requester_username": BreakglassRequest.requester_id,
+        "approver_username": BreakglassRequest.approver_id,
+        "start_time": BreakglassRequest.start_time,
+        "created_at": BreakglassRequest.created_at,
+        "status": BreakglassRequest.status,
+    }
+
+    if sort_by not in valid_sort_fields:
+        sort_by = "created_at"
+
+    column = valid_sort_fields[sort_by]
+    order_clause = column.asc() if sort_dir == "asc" else column.desc()
+
+    # ---- total count BEFORE pagination ----
+    total_result = await db.execute(
+        select(func.count()).select_from(BreakglassRequest)
+    )
+    total = total_result.scalar_one()
+
+    # ---- fetch sorted + paginated rows ----
+    result = await db.execute(
+        select(BreakglassRequest)
+        .order_by(order_clause)
+        .offset((page - 1) * page_size)
+        .limit(page_size)
+    )
     requests = result.scalars().all()
 
     response = []
-
     for r in requests:
-        # Fetch requester username
         requester = await db.get(Account, r.requester_id)
-        requester_username = requester.username if requester else None
-
-        # Fetch approver username (may be None)
-        approver_username = None
-        if r.approver_id:
-            approver = await db.get(Account, r.approver_id)
-            approver_username = approver.username if approver else None
+        approver = await db.get(Account, r.approver_id) if r.approver_id else None
 
         response.append({
             "id": r.id,
@@ -60,38 +153,34 @@ async def list_requests(
             "account_username": r.account_username,
 
             "requester_id": r.requester_id,
-            "requester_username": requester_username,
+            "requester_username": requester.username if requester else None,
 
             "approver_id": r.approver_id,
-            "approver_username": approver_username,
+            "approver_username": approver.username if approver else None,
 
             "request_reason": r.request_reason,
             "approve_reason": r.approve_reason,
 
-            # Time window
             "start_time": to_local_time(r.start_time) if r.start_time else None,
             "end_time": to_local_time(r.end_time) if r.end_time else None,
 
-            # Status
             "status": r.status,
 
-            # Timestamps
             "created_at": to_local_time(r.created_at) if r.created_at else None,
             "approved_at": to_local_time(r.approved_at) if r.approved_at else None,
 
-            # Approval method: direct / otp / email
             "approval_method": r.approval_method,
 
-            # ---------------------------------------------------------
-            # Rotation information
-            # ---------------------------------------------------------
-            "rotation_status": r.rotation_status,     # queued / running / success / failed
-            "rotation_error": r.rotation_error,       # error message or None
+            "rotation_status": r.rotation_status,
+            "rotation_error": r.rotation_error,
             "rotation_at": to_local_time(r.rotation_at) if r.rotation_at else None,
         })
 
-    return {"ok": True, "requests": response}
-
+    return {
+        "ok": True,
+        "requests": response,
+        "total": total,
+    }
 
 @router.get("/approverlist", response_model=dict)
 async def get_otp_approvers(

@@ -9,7 +9,7 @@ from core.vault import VaultClient
 from core.utils import to_local_time
 
 from core.db import get_db
-from deps.auth import get_current_user
+from deps.auth import get_current_user, get_current_user_optional
 from core.security import verify_password, create_access_token, hash_password
 from models.account import Account
 from models.request import BreakglassRequest
@@ -35,7 +35,7 @@ async def approval_dashboard(
     method: str | None = None,
     rotation: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: Account = Depends(get_current_user),
+    current_user: Account = Depends(get_current_user_optional),
 ):
     # Only approver roles allowed
     if not current_user or current_user.role not in ("approver", "requester_approver"):

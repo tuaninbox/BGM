@@ -24,32 +24,50 @@ templates.env.cache.clear()
 async def devices_page(
     request: Request,
     current_user: Account | None = Depends(get_current_user_optional),
+    page: int = 1,
+    page_size: str = "20",
+    sort_by: str = "name",
+    sort_dir: str = "asc",
 ):
+    # -----------------------------------------
+    # Not logged in → redirect + log
+    # -----------------------------------------
     if current_user is None:
         log_action(
             current_user,
             "device_view",
-            f"Device View - View Device page - Unauthorized",
+            f"Device View - Unauthorized access attempt",
             request,
             category="device",
-        )  
+        )
         return RedirectResponse("/ui/login")
 
-    # Load devices from backend API
-    api_url = f"{settings.backend_url}/api/devices"
-
-    # Forward user cookies to API
-    cookies = request.cookies
+    try:
+        if page_size == "custom":
+            page_size_int = 20   # fallback default
+        else:
+            page_size_int = int(page_size)
+    except ValueError:
+        page_size_int = 20
+    # -----------------------------------------
+    # Build backend API URL
+    # -----------------------------------------
+    api_url = (
+        f"{settings.backend_url}/api/devices"
+        f"?page={page}&page_size={page_size_int}"
+        f"&sort_by={sort_by}&sort_dir={sort_dir}"
+    )
 
     api_resp = await request.app.state.http_client.get(
         api_url,
-        cookies=cookies
+        cookies=request.cookies
     )
 
+    # -----------------------------------------
     # Parse JSON safely
+    # -----------------------------------------
     try:
         data = api_resp.json()
-
     except Exception:
         log_action(
             current_user,
@@ -64,12 +82,19 @@ async def devices_page(
                 "request": request,
                 "current_user": current_user,
                 "devices": [],
-                "error": "Backend returned invalid JSON"
+                "error": "Backend returned invalid JSON",
+                "page": page,
+                "page_size": page_size,
+                "sort_by": sort_by,
+                "sort_dir": sort_dir,
+                "total": 0,
             },
             status_code=500,
         )
 
-    # Handle backend error response
+    # -----------------------------------------
+    # Backend error response
+    # -----------------------------------------
     if not data.get("ok"):
         log_action(
             current_user,
@@ -85,83 +110,163 @@ async def devices_page(
                 "current_user": current_user,
                 "devices": [],
                 "error": data.get("error"),
+                "page": page,
+                "page_size": page_size_int,
+                "sort_by": sort_by,
+                "sort_dir": sort_dir,
+                "total": 0,
             },
             status_code=500,
         )
 
+    # -----------------------------------------
     # Extract device list
+    # -----------------------------------------
     devices = data.get("devices", [])
-    has_approver = data.get("has_approver")
+    total = data.get("total", 0)
 
-    # Log success
+    # -----------------------------------------
+    # HTMX partial load
+    # -----------------------------------------
+    if request.headers.get("HX-Request"):
+        log_action(
+            current_user,
+            "device_view",
+            f"Device View - HTMX partial load (page={page}, size={page_size_int}, sort={sort_by}:{sort_dir})",
+            request,
+            category="device",
+        )
+        return templates.TemplateResponse(
+            "partials/devices_table.html",
+            {
+                "request": request,
+                "current_user": current_user,
+                "devices": devices,
+                "total": total,
+                "page": page,
+                "page_size": page_size_int,
+                "sort_by": sort_by,
+                "sort_dir": sort_dir,
+            },
+        )
+
+    # -----------------------------------------
+    # Full page load
+    # -----------------------------------------
     log_action(
         current_user,
         "device_view",
-        "Device View - Logged-in user view device page",
+        f"Device View - Full page load (page={page}, size={page_size_int}, sort={sort_by}:{sort_dir})",
         request,
         category="device",
     )
-    # print(f"Request: {devices.request}")
 
-    # Render template
     return templates.TemplateResponse(
         "devices.html",
         {
             "request": request,
             "current_user": current_user,
             "devices": devices,
-            "has_approver": has_approver,
+            "total": total,
+            "page": page,
+            "page_size": page_size_int,
+            "sort_by": sort_by,
+            "sort_dir": sort_dir,
         },
     )
 
-# @router.post("/requests/{request_id}/copy-password")
-# async def ui_copy_password(request: Request, request_id: int, current_user: Account = Depends(get_current_user)):
-#     vault = VaultClient(request.app.state.config, tenant="NCP")
-#     password = await vault.get_breakglass_password(request_id)
+# Devices without pagination
+# @router.get("/devices", response_class=HTMLResponse)
+# async def devices_page(
+#     request: Request,
+#     current_user: Account | None = Depends(get_current_user_optional),
+# ):
+#     if current_user is None:
+#         log_action(
+#             current_user,
+#             "device_view",
+#             f"Device View - View Device page - Unauthorized",
+#             request,
+#             category="device",
+#         )  
+#         return RedirectResponse("/ui/login")
 
-#     return HTMLResponse(
-#         f"""
-#         <script>
-#           navigator.clipboard.writeText("{password}");
-#           document.getElementById('toast').innerHTML =
-#             '<div class="bg-green-100 text-green-700 p-2 rounded mt-2">Password copied!</div>';
-#           setTimeout(() => {{
-#             document.getElementById('toast').innerHTML = '';
-#           }}, 3000);
-#         </script>
-#         """
+#     # Load devices from backend API
+#     api_url = f"{settings.backend_url}/api/devices"
+
+#     # Forward user cookies to API
+#     cookies = request.cookies
+
+#     api_resp = await request.app.state.http_client.get(
+#         api_url,
+#         cookies=cookies
 #     )
 
-# @router.get("/requests/{request_id}/show-password")
-# async def ui_show_password(request: Request, request_id: int, current_user: Account = Depends(get_current_user)):
-#     vault = VaultClient(request.app.state.config, tenant="NCP")
-#     password = await vault.get_breakglass_password(request_id)
+#     # Parse JSON safely
+#     try:
+#         data = api_resp.json()
 
-#     return HTMLResponse(
-#         f"""
-#         <div class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center">
-#           <div class="bg-white p-6 rounded shadow-lg w-96 text-center">
-#             <h2 class="text-xl font-bold mb-3">Breakglass Password</h2>
-#             <p class="text-lg font-mono mb-4">{password}</p>
+#     except Exception:
+#         log_action(
+#             current_user,
+#             "device_view",
+#             "Device View - Backend returned invalid JSON",
+#             request,
+#             category="device",
+#         )
+#         return templates.TemplateResponse(
+#             "devices.html",
+#             {
+#                 "request": request,
+#                 "current_user": current_user,
+#                 "devices": [],
+#                 "error": "Backend returned invalid JSON"
+#             },
+#             status_code=500,
+#         )
 
-#             <p class="text-xs text-gray-600 mb-4">This window will close automatically in 20 seconds.</p>
+#     # Handle backend error response
+#     if not data.get("ok"):
+#         log_action(
+#             current_user,
+#             "device_view",
+#             f"Device View - Backend error: {data.get('error')}",
+#             request,
+#             category="device",
+#         )
+#         return templates.TemplateResponse(
+#             "devices.html",
+#             {
+#                 "request": request,
+#                 "current_user": current_user,
+#                 "devices": [],
+#                 "error": data.get("error"),
+#             },
+#             status_code=500,
+#         )
 
-#             <button class="bg-gray-300 px-4 py-2 rounded"
-#                     onclick="document.getElementById('modal').innerHTML=''">
-#               Close
-#             </button>
-#           </div>
-#         </div>
+#     # Extract device list
+#     devices = data.get("devices", [])
+#     has_approver = data.get("has_approver")
 
-#         <script>
-#           setTimeout(() => {{
-#             document.getElementById('modal').innerHTML = '';
-#           }}, 20000);
-#         </script>
-#         """
+#     # Log success
+#     log_action(
+#         current_user,
+#         "device_view",
+#         "Device View - Logged-in user view device page",
+#         request,
+#         category="device",
+#     )
+#     # print(f"Request: {devices.request}")
+
+#     # Render template
+#     return templates.TemplateResponse(
+#         "devices.html",
+#         {
+#             "request": request,
+#             "current_user": current_user,
+#             "devices": devices,
+#             "has_approver": has_approver,
+#         },
 #     )
 
-
-@router.get("/interactive")
-async def interactive_page(request: Request):
-    return templates.TemplateResponse("interactive.html", {"request": request})

@@ -30,7 +30,7 @@ class BreakglassRequest(Base):
     approval_method = Column(String, nullable=True)  # direct / otp / email
     used_at = Column(String, nullable=True)
 
-    rotation_status = Column(String, default="unused")  # unused / pending / queued / running / success / failed
+    rotation_status = Column(String, default="not_required")  # not_required / pending / queued / running / success / failed
     rotation_error = Column(String, nullable=True)
     rotation_at = Column(String, nullable=True)  # ISO-8601 UTC timestamp
 

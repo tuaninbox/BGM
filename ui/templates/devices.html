@@ -1,160 +1,25 @@
 {% extends "base.html" %}
 {% block content %}
 
-<!-- Xterm.js CSS + JS -->
-<!-- <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/xterm/css/xterm.css" />
-<script src="https://cdn.jsdelivr.net/npm/xterm/lib/xterm.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/xterm/lib/addons/fit/fit.js"></script> -->
-<!-- <script src="/static/js/xterm.js"></script>
-<script src="/static/js/xterm-addon-fit.js"></script> -->
+<!-- Sticky Title -->
+<div class="sticky top-0 z-30 bg-white shadow-sm py-4 mb-4">
+  <h1 class="text-2xl font-bold text-center">Devices</h1>
+</div>
 
-<link rel="stylesheet" href="/static/css/tailwind.min.css" />
-
-<h1 class="text-2xl font-bold mb-6 text-center">Breakglass Accounts</h1>
-<!-- Inline popup container -->
-<div id="inline-popup"></div>
-<div class="px-4">
-
-
-
-  <!-- Two-column layout -->
-  <!-- <div class="flex flex-col md:flex-row md:space-x-6"> -->
-<!-- Device + Breakglass Table -->
-<div class="w-full px-4">  <!-- small gap left/right -->
-  <div class="border rounded bg-white p-4">
-    <div class="overflow-x-auto">
-      <table class="min-w-full border-collapse">
-        <thead>
-          <tr class="bg-gray-100 border-b">
-            <th class="px-3 py-2 text-left">Device</th>
-            <th class="px-3 py-2 text-left">IP</th>
-            <th class="px-3 py-2 text-left">OS</th>
-            <th class="px-3 py-2 text-left">Location</th>
-            <th class="px-3 py-2 text-left">Breakglass Accounts</th>
-            <th class="px-3 py-2 text-left">Action</th>
-          </tr>
-        </thead>
-
-        <tbody>
-          {% for d in devices %}
-          <tr class="border-b hover:bg-gray-50">
-            <td class="px-3 py-2">{{ d.name }}</td>
-            <td class="px-3 py-2">{{ d.ip }}</td>
-            <td class="px-3 py-2">{{ d.os }}</td>
-            <td class="px-3 py-2">{{ d.location }}</td>
-
-            <td class="px-3 py-2">
-              {% if d.username %}
-                   {{ d.username }}
-              {% else %}
-                <span class="text-gray-500">None</span>
-              {% endif %}
-            </td>
-
-     <td class="px-3 py-2">
-
-      {% if d.request and d.request.status in ["pending", "approved"] %}
-
-        {# --------------------------------------------------------- #}
-        {# ACTIVE REQUEST FOUND                                      #}
-        {# --------------------------------------------------------- #}
-
-        {% if d.request.status == "pending" %}
-          <span class="text-yellow-700 bg-yellow-100 px-2 py-1 rounded text-xs">
-            Pending Approval
-          </span>
-
-          <p class="text-xs text-gray-600 mb-2">
-            pending until {{ d.request.end_time }}
-          </p>
-
-        {% elif d.request.status == "approved" %}
-        <div id="pwbox-{{ d.request.id }}">
-          <span class="text-green-700 bg-green-100 px-2 py-1 rounded text-xs">
-            Approved</span>
-            <span class="text-xs text-gray-600 mb-2">
-            by {{ d.request.approver_username }}</span>
-          <p class="text-xs text-gray-600 mb-2">
-            Active until {{ d.request.end_time }}
-          </p>
-          </div>
-          <button
-            class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 mr-2"
-            type="button"
-            onclick="copyBreakglassPassword({{ d.request.id }})">
-            Copy Password
-          </button>
-
-          <!-- <button
-            class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 mr-2"
-            hx-get="/ui/requests/{{ d.request.id }}/copy-password"
-            hx-trigger="click"
-            hx-target="#modal"
-            hx-swap="innerHTML">
-            Copy Password
-          </button> -->
-
-          <button
-            class="bg-gray-700 text-white px-3 py-1 rounded hover:bg-gray-800"
-            hx-get="/ui/requests/{{ d.request.id }}/show-password"
-            hx-target="#modal"
-            hx-swap="innerHTML">
-            Show Password
-          </button>
-
-        {% endif %}
-
-      {% else %}
-
-        {# --------------------------------------------------------- #}
-        {# NO ACTIVE REQUEST — NORMAL REQUEST ACCESS BUTTON          #}
-        {# --------------------------------------------------------- #}
-
-        {% if has_approver %}
-          {% if current_user.role in ["requester", "requester_approver"] %}
-            <button
-              class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-              hx-get="/ui/requests/create-modal/{{ d.name }}"
-              hx-target="#modal"
-              hx-swap="innerHTML">
-              Request Access
-            </button>
-          {% else %}
-            <button
-              class="bg-gray-400 text-white px-3 py-1 rounded cursor-not-allowed"
-              disabled>
-              Request Access
-            </button>
-            <p class="text-xs text-red-600 mt-1">You do not have permission</p>
-          {% endif %}
-        {% else %}
-          <button
-            class="bg-gray-400 text-white px-3 py-1 rounded cursor-not-allowed"
-            disabled>
-            Request Access
-          </button>
-          <p class="text-xs text-red-600 mt-1">No approver available</p>
-        {% endif %}
-
-      {% endif %}
-
-    </td>
-
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-    </div>
-
+{% if error %}
+  <div class="bg-red-100 text-red-700 p-3 rounded mb-4">
+    {{ error }}
   </div>
+{% endif %}
 
-  <!-- Hidden selected device fields -->
-  <input type="hidden" id="selected-device" value="">
-  <input type="hidden" id="selected-device-name" value="">
+<!-- HTMX wrapper -->
+<div id="devices-table" hx-target="this" hx-swap="innerHTML">
+    {% include "partials/devices_table.html" %}
 </div>
 
 <div id="modal"></div>
 
 <script src="/static/js/account.js"></script>
 <script src="/static/js/device.js"></script>
+
 {% endblock %}

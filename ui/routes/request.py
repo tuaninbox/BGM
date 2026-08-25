@@ -22,83 +22,147 @@ templates = Jinja2Templates(directory="ui/templates")
 templates.env.globals["has_permission"] = has_permission
 templates.env.cache.clear()
 
+# Request without sorting
+# @router.get("/requests", response_class=HTMLResponse)
+# async def requests_page(
+#     request: Request,
+#     current_user: Account = Depends(get_current_user_optional),
+# ):
+#     # ---------------------------------------------------------
+#     # Session expired → redirect to login
+#     # ---------------------------------------------------------
+#     if current_user is None:
+#         return RedirectResponse("/ui/login")
+
+#     roles = request.app.state.roles
+
+#     # ---------------------------------------------------------
+#     # Frontend RBAC: must have read_requests permission
+#     # ---------------------------------------------------------
+#     if not has_permission(current_user.role, "read_requests", roles):
+#         return templates.TemplateResponse(
+#             "request.html",
+#             {
+#                 "request": request,
+#                 "current_user": current_user,
+#                 "requests": [],
+#                 "error": "Permission denied",
+#             },
+#         )
+
+#     # ---------------------------------------------------------
+#     # Call backend API
+#     # ---------------------------------------------------------
+#     api_url = f"{settings.backend_url}/api/requests"
+
+#     try:
+#         api_resp = await request.app.state.http_client.get(
+#             api_url,
+#             cookies=request.cookies
+#         )
+#     except Exception as e:
+#         return HTMLResponse(
+#             f"""
+#             <div class="p-4 bg-red-100 text-red-700 rounded">
+#                 Frontend error contacting backend: {str(e)}
+#             </div>
+#             """
+#         )
+
+#     # ---------------------------------------------------------
+#     # Parse backend JSON
+#     # ---------------------------------------------------------
+#     try:
+#         data = api_resp.json()
+#     except Exception:
+#         data = {"ok": False, "error": "Invalid backend response"}
+
+#     # ---------------------------------------------------------
+#     # Backend permission or other error
+#     # ---------------------------------------------------------
+#     if not data.get("ok", False):
+#         return templates.TemplateResponse(
+#             "request.html",
+#             {
+#                 "request": request,
+#                 "current_user": current_user,
+#                 "requests": [],
+#                 "error": data.get("error", "Unknown backend error"),
+#             },
+#         )
+
+#     # ---------------------------------------------------------
+#     # Success → render requests page
+#     # ---------------------------------------------------------
+#     return templates.TemplateResponse(
+#         "request.html",
+#         {
+#             "request": request,
+#             "current_user": current_user,
+#             "requests": data.get("requests", []),
+#         },
+#     )
+
 @router.get("/requests", response_class=HTMLResponse)
 async def requests_page(
     request: Request,
     current_user: Account = Depends(get_current_user_optional),
+    page: int = 1,
+    page_size: str = "20",
+    sort_by: str = "created_at",
+    sort_dir: str = "desc",
 ):
-    # ---------------------------------------------------------
-    # Session expired → redirect to login
-    # ---------------------------------------------------------
     if current_user is None:
         return RedirectResponse("/ui/login")
 
     roles = request.app.state.roles
 
-    # ---------------------------------------------------------
-    # Frontend RBAC: must have read_requests permission
-    # ---------------------------------------------------------
     if not has_permission(current_user.role, "read_requests", roles):
+        template = "requests_table.html" if request.headers.get("HX-Request") else "request.html"
         return templates.TemplateResponse(
-            "request.html",
+            template,
             {
                 "request": request,
                 "current_user": current_user,
                 "requests": [],
                 "error": "Permission denied",
+                "page": page,
+                "page_size": page_size,
+                "sort_by": sort_by,
+                "sort_dir": sort_dir,
+                "total": 0,
             },
         )
-
-    # ---------------------------------------------------------
-    # Call backend API
-    # ---------------------------------------------------------
-    api_url = f"{settings.backend_url}/api/requests"
-
     try:
-        api_resp = await request.app.state.http_client.get(
-            api_url,
-            cookies=request.cookies
-        )
-    except Exception as e:
-        return HTMLResponse(
-            f"""
-            <div class="p-4 bg-red-100 text-red-700 rounded">
-                Frontend error contacting backend: {str(e)}
-            </div>
-            """
-        )
+        if page_size == "custom":
+            page_size_int = 20   # fallback default
+        else:
+            page_size_int = int(page_size)
+    except ValueError:
+        page_size_int = 20
 
-    # ---------------------------------------------------------
-    # Parse backend JSON
-    # ---------------------------------------------------------
-    try:
-        data = api_resp.json()
-    except Exception:
-        data = {"ok": False, "error": "Invalid backend response"}
+    api_url = (
+        f"{settings.backend_url}/api/requests"
+        f"?page={page}&page_size={page_size_int}"
+        f"&sort_by={sort_by}&sort_dir={sort_dir}"
+    )
 
-    # ---------------------------------------------------------
-    # Backend permission or other error
-    # ---------------------------------------------------------
-    if not data.get("ok", False):
-        return templates.TemplateResponse(
-            "request.html",
-            {
-                "request": request,
-                "current_user": current_user,
-                "requests": [],
-                "error": data.get("error", "Unknown backend error"),
-            },
-        )
+    api_resp = await request.app.state.http_client.get(api_url, cookies=request.cookies)
+    data = api_resp.json()
 
-    # ---------------------------------------------------------
-    # Success → render requests page
-    # ---------------------------------------------------------
+    template = "partials/requests_table.html" if request.headers.get("HX-Request") else "request.html"
+
     return templates.TemplateResponse(
-        "request.html",
+        template,
         {
             "request": request,
             "current_user": current_user,
             "requests": data.get("requests", []),
+            "total": data.get("total", 0),
+            "page": page,
+            "page_size": page_size_int,
+            "sort_by": sort_by,
+            "sort_dir": sort_dir,
         },
     )
 
@@ -765,9 +829,24 @@ async def ui_close_request(
     # Success
     # ---------------------------------------------------------
     return HTMLResponse(
-        f"""
-        <div class='p-4 bg-green-100 text-green-800 rounded'>
-            Request closed. Rotation queued.
-        </div>
-        """
+    """
+    <div 
+        class="bg-green-600 text-white px-4 py-2 rounded shadow-lg text-center animate-fade-in"
+        hx-trigger="load"
+        hx-on="load: setTimeout(() => { 
+            document.getElementById('toast-container').innerHTML = ''; 
+            window.location.reload(); 
+        }, 2000)"
+    >
+        Request closed. Rotation queued.
+    </div>
+    """
     )
+
+    # return HTMLResponse(
+    #     f"""
+    #     <div class='p-4 bg-green-100 text-green-800 rounded'>
+    #         Request closed. Rotation queued.
+    #     </div>
+    #     """
+    # )
