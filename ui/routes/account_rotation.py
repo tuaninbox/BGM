@@ -24,7 +24,7 @@ async def rotation_jobs_page(
 ):
     roles = request.app.state.roles
 
-    # ⭐ Permission check
+    # Permission check
     if not has_permission(current_user.role, "read_background_jobs", roles):
         return RedirectResponse("/ui/login", status_code=302)
 

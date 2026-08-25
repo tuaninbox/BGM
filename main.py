@@ -19,7 +19,7 @@ from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import sessionmaker
 
 # API Routers
-from api import auth, accounts, logs as api_logs, request, dashboard
+from api import auth, accounts, logs as api_logs, request, dashboard, account_rotation
 
 # UI Routers
 from ui.routes import (
@@ -29,7 +29,7 @@ from ui.routes import (
     logs as ui_logs,
     request as ui_requests,
     dashboard as ui_dashboard,
-    account_rotation as ui_rotation_jobs
+    account_rotation as ui_account_rotation
 )
 
 from core.config_loader import load_config
@@ -39,6 +39,7 @@ from core.role_loader import load_roles
 from fastapi.responses import RedirectResponse
 from fastapi.exceptions import RequestValidationError
 from core.debug import validation_exception_handler
+
 
 
 app = FastAPI(title="Breakglass Management")
@@ -201,6 +202,7 @@ app.include_router(api_logs.router)
 app.include_router(device.router)
 app.include_router(request.router)
 app.include_router(dashboard.router)
+app.include_router(account_rotation.router)
 
 # UI Routers
 app.include_router(ui_auth.router)
@@ -209,7 +211,7 @@ app.include_router(ui_devices.router)
 app.include_router(ui_logs.router)
 app.include_router(ui_requests.router)
 app.include_router(ui_dashboard.router)
-app.include_router(ui_rotation_jobs.router)
+app.include_router(ui_account_rotation.router)
 
 app.add_exception_handler(RequestValidationError, validation_exception_handler)
 # ---------------------------------------------------------

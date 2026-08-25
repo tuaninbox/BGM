@@ -42,7 +42,7 @@ async def rotate_accounts_for_closed_requests():
                         await db.commit()
 
                         resp = await client.post(
-                            f"{settings.rotation_api_url}/rotate",
+                            f"{settings.rotation_api_url}/api/simulate_rotation",
                             json={
                                 "req_id": r.id,
                                 "device_name": r.device_name,

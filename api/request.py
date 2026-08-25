@@ -93,7 +93,6 @@ async def list_requests(
     return {"ok": True, "requests": response}
 
 
-
 @router.get("/approverlist", response_model=dict)
 async def get_otp_approvers(
     current_user: Account = Depends(get_current_user),
@@ -733,11 +732,12 @@ async def rotation_callback(
 ):
     # Validate machine token
     auth = request.headers.get("Authorization")
+    # print(f"api/request rotation callback - auth header: {auth}")
     if auth != f"Bearer {settings.rotation_api_token}":
         return {
             "ok": False,
             "error": "Unauthorized",
-            "timestamp": datetime.utcnow().isoformat() + "Z"
+            "timestamp": datetime.utc(timezone.utc).isoformat() + "Z"
         }
 
     req_id = payload.get("req_id")
@@ -750,7 +750,7 @@ async def rotation_callback(
             "ok": False,
             "error": "Request not found",
             "req_id": req_id,
-            "timestamp": datetime.utcnow().isoformat() + "Z"
+            "timestamp": datetime.now(timezone.utc).isoformat() # + "Z"
         }
 
     req.rotation_status = status
@@ -758,7 +758,7 @@ async def rotation_callback(
 
     # Set rotation_at only when rotation is finished
     if status in ("success", "failed"):
-        req.rotation_at = datetime.utcnow().isoformat() + "Z"
+        req.rotation_at = datetime.now(timezone.utc).isoformat() # + "Z"
 
     await db.commit()
 
@@ -768,7 +768,7 @@ async def rotation_callback(
         "rotation_status": status,
         "rotation_error": error,
         "rotation_at": req.rotation_at,
-        "timestamp": datetime.utcnow().isoformat() + "Z"
+        "timestamp": datetime.now(timezone.utc).isoformat() # + "Z"
     }
 
 

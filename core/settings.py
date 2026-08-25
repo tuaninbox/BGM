@@ -14,8 +14,8 @@ class Settings(BaseSettings):
     vault_token: str = "changeme"
 
     # Github or Ansible credential
-    rotation_api_url: str = "http://localhost"
-    rotation_api_token: str = "Secret to access github/ansible"
+    rotation_api_url: str = "http://localhost:8000"
+    rotation_api_token: str = "Some_secret_key"
     rotation_max_retries: int = 3
 
     # Email approval secret
