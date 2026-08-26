@@ -2,7 +2,11 @@
   <div class="bg-white p-6 rounded shadow-lg w-96">
 
     <h2 class="text-xl font-bold mb-3">Approve Request</h2>
-
+    {% if error %}
+    <div class="mb-4 p-3 rounded bg-red-100 text-red-700 border border-red-300">
+      {{ error }}
+    </div>
+    {% endif %}
     <form hx-post="/ui/requests/{{ req.id }}/approve"
           hx-target="#modal"
           hx-swap="innerHTML">
@@ -10,7 +14,7 @@
       <label class="block font-semibold mt-2">Approval Reason</label>
       <textarea name="approve_reason"
                 class="w-full border rounded p-2"
-                required></textarea>
+                required minlength="5" pattern=".*\S.*"></textarea>
 
       <div class="mt-4 flex justify-end">
         <button class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">

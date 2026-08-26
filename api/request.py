@@ -241,6 +241,12 @@ async def create_request(
         if end_dt > start_dt + timedelta(hours=72):
             return {"ok": False, "error": "End time cannot exceed 72 hours"}
 
+        form = await request.form()
+        reason = form.get("request_reason", "")
+
+        if not reason or not reason.strip():
+            return {"ok": False, "error": "Reason cannot be empty"}
+
         # Build payload
         payload = BreakglassRequestCreate(
             device_name=device_name,
@@ -381,6 +387,8 @@ async def approve_request(
     if settings.debug:
         print(f"Backend code, approver, reason: {otp_code} {approver_username} {approve_reason}")
 
+    if not approve_reason or not approve_reason.strip():
+        return {"ok": False, "error": "Reason cannot be empty"}
     # ---------------------------------------------------------
     # Load request
     # ---------------------------------------------------------
@@ -495,6 +503,11 @@ async def reject_request(
         form = await request.form()
         reject_reason = form.get("reject_reason")
 
+    form = await request.form()
+    reason = form.get("reject_reason", "")
+
+    if not reason or not reason.strip():
+        return {"ok": False, "error": "Reason cannot be empty"}
     # Load request
     stmt = select(BreakglassRequest).where(BreakglassRequest.id == req_id)
     result = await db.execute(stmt)
