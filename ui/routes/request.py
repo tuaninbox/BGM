@@ -708,18 +708,8 @@ async def ui_email_approve(
     token: str,
     request: Request,
 ):
-    """
-    UI endpoint for email approval link.
-    This endpoint:
-    - does NOT require login
-    - calls backend API to validate token and approve
-    - shows a friendly HTML message
-    - redirects to login after 5 seconds
-    """
-
     backend_url = f"{settings.backend_url}/api/requests/{req_id}/email-approve"
 
-    # Call backend API
     resp = await request.app.state.http_client.get(
         backend_url,
         params={"token": token},
@@ -727,7 +717,6 @@ async def ui_email_approve(
 
     data = resp.json()
 
-    # Prepare message
     if data.get("ok"):
         message = f"Request #{req_id} has been successfully approved via email."
         color = "green"
@@ -735,7 +724,6 @@ async def ui_email_approve(
         message = f"Email approval failed: {data.get('error', 'Unknown error')}"
         color = "red"
 
-    # Render simple HTML page with auto-redirect
     return HTMLResponse(
         f"""
         <!DOCTYPE html>
@@ -769,6 +757,7 @@ async def ui_email_approve(
         </html>
         """
     )
+
 
 @router.post("/requests/{req_id}/close", response_class=HTMLResponse)
 async def ui_close_request(

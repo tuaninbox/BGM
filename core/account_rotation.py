@@ -6,6 +6,7 @@ import httpx
 from core.db import AsyncSessionLocal
 from models.request import BreakglassRequest
 from core.settings import settings
+from core.email import send_rotation_email
 from core.audit_logger import log_action
 
 
@@ -94,11 +95,18 @@ async def rotate_accounts_for_closed_requests():
                         await db.commit()
 
 
-                    elapsed = datetime.now(timezone.utc).isoformat() - r.rotation_first_error
+                    now_dt = datetime.now(timezone.utc)
+
+                    # rotation_first_error is stored as ISO string
+                    first_error_dt = datetime.fromisoformat(r.rotation_first_error)
+
+                    # compute elapsed time correctly
+                    elapsed = now_dt - first_error_dt
+
 
                     if elapsed.total_seconds() >= settings.rotation_failure_window_minutes * 60:
                         if not r.rotation_failure_notified:
-                            await send_rotation_failure_email(r)
+                            await send_rotation_email(r,success=False)
                             r.rotation_failure_notified = True
                             await db.commit()
 

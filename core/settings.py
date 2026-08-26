@@ -19,6 +19,7 @@ class Settings(BaseSettings):
     rotation_max_retries: int = 3
     rotation_failure_window_minutes: int = 15
 
+
     # Email approval secret
     email_approval_secret: str = "Very Strong Secret Key Remember to change me"
 
@@ -29,6 +30,9 @@ class Settings(BaseSettings):
     smtp_password: str | None = None
     email_from: str = "breakglass@example.com"
     email_approval_domain: str = "http://localhost:8000"
+    email_approval_token_expiry_minutes: int = 1
+    email_group_notification: str = "user1@domain.com, user2@domain.com"
+    email_simulation: bool = True
 
     jwt_secret: str = "super-secret"
     jwt_algorithm: str = "HS256"

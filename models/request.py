@@ -1,4 +1,4 @@
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Boolean
 from core.db import Base
 from datetime import datetime, timezone
 
@@ -31,6 +31,8 @@ class BreakglassRequest(Base):
     used_at = Column(String, nullable=True)
 
     rotation_status = Column(String, default="not_required")  # not_required / pending / queued / running / success / failed
+    rotation_first_error = Column(String, nullable=True)
+    rotation_failure_notified = Column(Boolean, default=False)
     rotation_error = Column(String, nullable=True)
     rotation_at = Column(String, nullable=True)  # ISO-8601 UTC timestamp
 

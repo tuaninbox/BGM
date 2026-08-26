@@ -4,7 +4,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.db import get_db
 from models.account import Account
-from deps.auth import get_current_user
+from deps.auth import get_current_user_optional
 from core.audit_logger import log_action
 from core.settings import settings
 from core.permissions import has_permission
@@ -20,8 +20,13 @@ async def rotation_jobs_page(
     request: Request,
     status: str | None = None,
     db: AsyncSession = Depends(get_db),
-    current_user: Account = Depends(get_current_user),
+    current_user: Account = Depends(get_current_user_optional),
 ):
+
+    # If token expired or user not authenticated
+    if current_user is None:
+        return RedirectResponse("/ui/login", status_code=302)
+
     roles = request.app.state.roles
 
     # Permission check

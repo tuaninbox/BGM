@@ -1,5 +1,6 @@
 from api import device, inventory
 from fastapi import FastAPI
+from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -15,6 +16,8 @@ from core.settings import settings
 from datetime import datetime, timezone
 from core.utils import parse_iso8601
 from core.account_rotation import rotate_accounts_for_closed_requests
+from core.email import cleanup_email_approval_tokens
+from core.request import cleanup_requests
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from sqlalchemy.orm import sessionmaker
 
@@ -80,64 +83,69 @@ async def seed_admin_user():
         await db.commit()
         print("✔ Admin user created: username=admin password=admin123")
 
-async def cleanup_requests():
-    now_dt = datetime.now(timezone.utc)
+# async def cleanup_requests():
+#     now_dt = datetime.now(timezone.utc)
 
-    SchedulerSession = sessionmaker(
-        engine,
-        expire_on_commit=False,
-        class_=AsyncSession
-    )
+#     SchedulerSession = sessionmaker(
+#         engine,
+#         expire_on_commit=False,
+#         class_=AsyncSession
+#     )
 
-    async with SchedulerSession() as db:
-        result = await db.execute(
-            select(BreakglassRequest).where(
-                BreakglassRequest.status.in_(["pending", "approved", "used", "closed"])
-            )
-        )
-        rows = result.scalars().all()
+#     async with SchedulerSession() as db:
+#         result = await db.execute(
+#             select(BreakglassRequest).where(
+#                 BreakglassRequest.status.in_(["pending", "approved", "used", "closed"])
+#             )
+#         )
+#         rows = result.scalars().all()
 
-        changed = False
+#         changed = False
 
-        for r in rows:
-            end_dt = parse_iso8601(r.end_time)
-            if end_dt is None:
-                continue
+#         for r in rows:
+#             end_dt = parse_iso8601(r.end_time)
+#             if end_dt is None:
+#                 continue
 
-            if end_dt < now_dt:
+#             if end_dt < now_dt:
 
-                # pending → expired
-                if r.status == "pending":
-                    r.status = "expired"
-                    changed = True
+#                 # pending → expired
+#                 if r.status == "pending":
+#                     r.status = "expired"
+#                     changed = True
 
-                # approved → expired (never used)
-                elif r.status == "approved":
-                    r.status = "expired"
-                    changed = True
+#                 # approved → expired (never used)
+#                 elif r.status == "approved":
+#                     r.status = "expired"
+#                     changed = True
 
-                # used → closed → queue rotation
-                elif r.status == "used":
-                    r.status = "closed"
-                    r.rotation_status = "pending"
-                    r.rotation_at = None
-                    changed = True
+#                 # used → closed → queue rotation
+#                 elif r.status == "used":
+#                     r.status = "closed"
+#                     r.rotation_status = "pending"
+#                     r.rotation_at = None
+#                     changed = True
 
-                # closed → queue rotation if not already queued
-                elif r.status == "closed":
-                    if r.rotation_status == "not_required":
-                        r.rotation_status = "pending"
-                        r.rotation_at = None
-                        changed = True
+#                 # closed → queue rotation if not already queued
+#                 elif r.status == "closed":
+#                     if r.rotation_status == "not_required":
+#                         r.rotation_status = "pending"
+#                         r.rotation_at = None
+#                         changed = True
 
-        if changed:
-            await db.commit()
-            print("✔ Cleanup: expired/closed requests updated")
+#         if changed:
+#             await db.commit()
+#             print("✔ Cleanup: expired/closed requests updated")
 
 def start_scheduler():
     scheduler = AsyncIOScheduler()
     scheduler.add_job(cleanup_requests, "interval", minutes=1)
     scheduler.add_job(rotate_accounts_for_closed_requests, "interval", minutes=1)
+    scheduler.add_job(cleanup_email_approval_tokens, "interval", minutes=5)
+    # Weekly summary every Monday at 08:00
+    # scheduler.add_job(send_weekly_rotation_summary,"cron",day_of_week="mon",hour=8,minute=0)
+    # Monthly summary on the 1st at 08:00
+    #scheduler.add_job(send_monthly_rotation_summary,"cron",day=1,hour=8,minute=0)
     scheduler.start()
     print("✔ APScheduler started")
 # ---------------------------------------------------------
@@ -220,3 +228,8 @@ app.add_exception_handler(RequestValidationError, validation_exception_handler)
 @app.get("/")
 async def root():
     return RedirectResponse(url="/ui/login")
+
+# Serve favicon.ico at root
+@app.get("/favicon.ico", include_in_schema=False)
+async def favicon():
+    return FileResponse("ui/static/favicon.ico")

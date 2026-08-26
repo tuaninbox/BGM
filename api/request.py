@@ -7,10 +7,11 @@ from core.db import get_db
 from schemas.request import BreakglassRequestCreate, BreakglassRequestUpdate
 from models.account import Account
 from models.request import BreakglassRequest
+from models.email_approval_token import EmailApprovalToken
 from deps.auth import get_current_user
 from core.debug import debug_error, debug_print
 from core.vault import VaultClient
-from core.email import generate_email_approval_token, validate_email_approval_token, send_approval_email
+from core.email import generate_email_approval_token, validate_email_approval_token, send_email_approval_links, send_rotation_email
 from core.audit_logger import log_action
 from core.settings import settings
 from core.permissions import has_permission
@@ -217,13 +218,11 @@ async def create_request(
     request_reason: str = Form(...),
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
-    ):
+):
     roles = request.app.state.roles
 
     try:
-        # ---------------------------------------------------------
-        # Permission check (RBAC)
-        # ---------------------------------------------------------
+        # RBAC
         if not has_permission(current_user.role, "request_bg_account", roles):
             return {
                 "ok": False,
@@ -231,28 +230,16 @@ async def create_request(
                 "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
             }
 
-        # ---------------------------------------------------------
-        # Convert incoming times to UTC datetime objects
-        # ---------------------------------------------------------
+        # Convert times
         start_dt = start_time.astimezone(timezone.utc)
         end_dt = end_time.astimezone(timezone.utc)
 
-        # ---------------------------------------------------------
         # Time validation
-        # ---------------------------------------------------------
         if end_dt <= start_dt:
-            return {
-                "ok": False,
-                "error": "End time must be after start time",
-                "timestamp": datetime.utcnow().isoformat() + "Z"
-            }
+            return {"ok": False, "error": "End time must be after start time"}
 
         if end_dt > start_dt + timedelta(hours=72):
-            return {
-                "ok": False,
-                "error": "End time cannot exceed 72 hours from start time",
-                "timestamp": datetime.utcnow().isoformat() + "Z"
-            }
+            return {"ok": False, "error": "End time cannot exceed 72 hours"}
 
         # Build payload
         payload = BreakglassRequestCreate(
@@ -269,9 +256,7 @@ async def create_request(
         payload_dict["start_time"] = payload.start_time.isoformat()
         payload_dict["end_time"] = payload.end_time.isoformat()
 
-        # ---------------------------------------------------------
         # Vault lookup
-        # ---------------------------------------------------------
         vault = VaultClient(request.app.state.config, tenant="NCP")
         bgaccounts = await vault.get_breakglass_accounts()
 
@@ -279,17 +264,11 @@ async def create_request(
         bg = bg_lookup.get(payload.device_name)
 
         if not bg:
-            return {
-                "ok": False,
-                "error": "Breakglass account not found for device",
-                "timestamp": datetime.utcnow().isoformat() + "Z"
-            }
+            return {"ok": False, "error": "Breakglass account not found for device"}
 
         account_username = bg["username"]
 
-        # ---------------------------------------------------------
-        # DUPLICATE CHECK (with expiry handling)
-        # ---------------------------------------------------------
+        # Duplicate check
         dup_query = await db.execute(
             select(BreakglassRequest).where(
                 BreakglassRequest.device_name == payload.device_name,
@@ -326,64 +305,25 @@ async def create_request(
         if duplicate:
             return {
                 "ok": False,
-                "error": f"A pending request already exists (request_id={duplicate.id})",
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
+                "error": f"A pending request already exists (request_id={duplicate.id})"
             }
 
-        # ---------------------------------------------------------
         # Create DB object
-        # ---------------------------------------------------------
         req = BreakglassRequest(**payload_dict, status="pending")
-
         db.add(req)
         await db.commit()
         await db.refresh(req)
 
-        # ---------------------------------------------------------
-        # Approver lookup
-        # ---------------------------------------------------------
-        result = await db.execute(
-            select(Account).where(
-                Account.role.in_(["approver", "requester_approver"]),
-                Account.otp_enabled == True
-            )
+        # Queue approval emails (NEW unified function)
+        background_tasks.add_task(
+            send_email_approval_links,
+            req,
+            db,
+            background_tasks,
+            request
         )
-        approvers = result.scalars().all()
-        approvers = [a for a in approvers if a.id != current_user.id]
 
-        if not approvers:
-            return {
-                "ok": False,
-                "error": "No approver available to approve request",
-                "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
-            }
-
-        # Sending approval email for each approver
-        for approver in approvers:
-            debug_print("Approver resolved", {
-                "id": approver.id,
-                "username": approver.username,
-                "email": approver.email
-            })
-
-            # Send approval email
-            token = generate_email_approval_token(req.id, approver.id)
-            approval_link = f"{settings.backend_url}/ui/requests/{req.id}/email-approve?token={token}"
-            debug_print("Approval token", token)
-            debug_print("Approval link", approval_link)
-
-            # Send email in background
-            background_tasks.add_task(
-                send_approval_email,
-                approver.email,
-                req.device_name,
-                req.requester_username,
-                approval_link
-            )
-
-        # ---------------------------------------------------------
-        # Log action
-        # ---------------------------------------------------------
+        # Log
         log_action(
             current_user,
             "breakglass_request",
@@ -396,11 +336,8 @@ async def create_request(
 
     except Exception as e:
         debug_error(e)
-        return {
-            "ok": False,
-            "error": str(e),
-            "timestamp": datetime.now(timezone.utc).isoformat() + "Z"
-        }
+        return {"ok": False, "error": str(e)}
+
 
 @router.post("/requests/{req_id}/approve")
 async def approve_request(
@@ -604,15 +541,26 @@ async def email_approve_request(
     request: Request,
     db: AsyncSession = Depends(get_db),
 ):
-    # Validate token
-    payload = validate_email_approval_token(token)
-    if not payload:
-        return {"ok": False, "error": "Invalid or expired approval token"}
+    # Validate token cryptographically
+    result = await validate_email_approval_token(token)
+    if not result["ok"]:
+        return {"ok": False, "error": result["error"]}
 
-    if payload["req_id"] != req_id:
+    if result["req_id"] != req_id:
         return {"ok": False, "error": "Token does not match request"}
 
-    approver_id = payload["approver_id"]
+    approver_id = result["approver_id"]
+    nonce = result["nonce"]
+
+    # Replay protection: check nonce in DB
+    token_row = await db.scalar(
+        select(EmailApprovalToken).where(EmailApprovalToken.nonce == nonce)
+    )
+    if not token_row:
+        return {"ok": False, "error": "Unknown or revoked token"}
+
+    if token_row.used_at is not None:
+        return {"ok": False, "error": "Token already used"}
 
     # Load approver
     approver = await db.scalar(select(Account).where(Account.id == approver_id))
@@ -624,7 +572,7 @@ async def email_approve_request(
     if not req:
         return {"ok": False, "error": "Request not found"}
 
-    # If request has been approved
+    # Already approved?
     if req.status != "pending":
         return {"ok": False, "error": f"Request already {req.status}"}
 
@@ -632,7 +580,7 @@ async def email_approve_request(
     if req.requester_id == approver_id:
         return {"ok": False, "error": "Cannot approve your own request"}
 
-    # Approve
+    # Approve request
     req.status = "approved"
     req.approver_id = approver_id
     req.approver_username = approver.username
@@ -640,9 +588,12 @@ async def email_approve_request(
     req.approved_at = datetime.now(timezone.utc).isoformat()
     req.approval_method = "email"
 
+    # Mark token as used (replay protection)
+    token_row.used_at = datetime.now(timezone.utc)
+
     await db.commit()
 
-    # Audit log
+    # 9. Audit log
     log_action(
         approver,
         "breakglass_approve_email",
@@ -651,7 +602,74 @@ async def email_approve_request(
         category="breakglass",
     )
 
-    return {"ok": True, "method": "email", "approved_by": approver.username}
+    return {
+        "ok": True,
+        "method": "email",
+        "approved_by": approver.username,
+        "req_id": req_id,
+    }
+
+# No replay protection
+# @router.get("/requests/{req_id}/email-approve")
+# async def email_approve_request(
+#     req_id: int,
+#     token: str,
+#     request: Request,
+#     db: AsyncSession = Depends(get_db),
+# ):
+#     # Validate token
+#     result = validate_email_approval_token(token)
+#     if not result["ok"]:
+#         return {"ok": False, "error": result["error"]}
+
+#     if result["req_id"] != req_id:
+#         return {"ok": False, "error": "Token does not match request"}
+
+#     approver_id = result["approver_id"]
+
+#     # Load approver
+#     approver = await db.scalar(select(Account).where(Account.id == approver_id))
+#     if not approver:
+#         return {"ok": False, "error": "Approver not found"}
+
+#     # Load request
+#     req = await db.scalar(select(BreakglassRequest).where(BreakglassRequest.id == req_id))
+#     if not req:
+#         return {"ok": False, "error": "Request not found"}
+
+#     # Already approved?
+#     if req.status != "pending":
+#         return {"ok": False, "error": f"Request already {req.status}"}
+
+#     # Prevent self-approval
+#     if req.requester_id == approver_id:
+#         return {"ok": False, "error": "Cannot approve your own request"}
+
+#     # Approve
+#     req.status = "approved"
+#     req.approver_id = approver_id
+#     req.approver_username = approver.username
+#     req.approve_reason = "Approved via email link"
+#     req.approved_at = datetime.now(timezone.utc).isoformat()
+#     req.approval_method = "email"
+
+#     await db.commit()
+
+#     # Audit log
+#     log_action(
+#         approver,
+#         "breakglass_approve_email",
+#         f"Email approved request {req_id}",
+#         request,
+#         category="breakglass",
+#     )
+
+#     return {
+#         "ok": True,
+#         "method": "email",
+#         "approved_by": approver.username,
+#         "req_id": req_id,
+#     }
 
 
 @router.get("/requests/{req_id}/show-password")
@@ -854,7 +872,7 @@ async def rotation_callback(
         req.rotation_failure_notified = False
 
         # Send success email
-        await send_rotation_success_email(req)
+        await send_rotation_email(req,success=True)
 
     await db.commit()
 

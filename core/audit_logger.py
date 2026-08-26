@@ -19,8 +19,16 @@ logger.add(
     format="{message}",                   # raw JSON only
 )
 
-def log_action(user, action: str, details: str, request: Request,
+def log_action(user, action: str, details: str, request= None,
                status="success", category="general"):
+
+    # Only extract IP if this is a FastAPI Request object
+    if request is not None and hasattr(request, "client"):
+        ip = request.client.host
+        path = request.url.path
+    else:
+        ip = None
+        path = None
 
     # Normalize user
     if hasattr(user, "username"):
@@ -40,8 +48,8 @@ def log_action(user, action: str, details: str, request: Request,
         "action": action,
         "category": category,
         "details": details,
-        "ip": request.client.host if request and request.client else None,
-        "path": request.url.path if request else None,
+        "ip": ip,
+        "path": path,
         "status": status,
     }
 

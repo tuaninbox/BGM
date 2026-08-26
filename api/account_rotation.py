@@ -17,6 +17,7 @@ async def api_rotation_jobs(
     db: AsyncSession = Depends(get_db),
     current_user: Account = Depends(get_current_user),
 ):
+
     roles = request.app.state.roles
 
     # Permission check
@@ -55,7 +56,7 @@ async def mock_rotate(payload: dict):
     req_id = payload["req_id"]
     import asyncio, httpx
     # Simulate rotation delay
-    await asyncio.sleep(60)
+    await asyncio.sleep(5)
 
     # Call back to your callback endpoint
     async with httpx.AsyncClient() as client:
