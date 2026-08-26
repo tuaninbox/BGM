@@ -7,6 +7,7 @@ from models.account import Account
 from sqlalchemy.ext.asyncio import AsyncSession
 from core.settings import settings
 from deps.auth import get_current_user
+from core.audit_logger import log_action
 
 router = APIRouter(prefix="/api", tags=["accounts"])
 
@@ -56,7 +57,7 @@ async def mock_rotate(payload: dict):
     req_id = payload["req_id"]
     import asyncio, httpx
     # Simulate rotation delay
-    await asyncio.sleep(5)
+    await asyncio.sleep(20)
 
     # Call back to your callback endpoint
     async with httpx.AsyncClient() as client:
@@ -69,5 +70,11 @@ async def mock_rotate(payload: dict):
             },
             headers={"Authorization": f"Bearer {settings.rotation_api_token}"}
         )
-
+    log_action(
+        user="system",
+        action="rotation_callback",
+        details=f"Rotation callback successfully for request {req_id}",
+        request=None,
+        category="simulation"
+    )
     return {"ok": True, "message": "Rotation simulated"}

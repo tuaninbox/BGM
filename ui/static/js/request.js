@@ -8,3 +8,15 @@ function approveRequest(id) {
   .then(data => location.reload());
 }
 
+
+document.getElementById('toast-container')
+  .addEventListener('htmx:afterSwap', () => {
+      // When toast is inserted, start countdown
+      setTimeout(() => {
+          // Clear toast
+          document.getElementById('toast-container').innerHTML = '';
+
+          // Reload page
+          window.location.reload();
+      }, 2000);
+  });

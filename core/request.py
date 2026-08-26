@@ -48,13 +48,6 @@ async def cleanup_requests():
                     r.rotation_at = None
                     changed = True
 
-                # closed → queue rotation if not already queued
-                elif r.status == "closed":
-                    if r.rotation_status == "not_required":
-                        r.rotation_status = "pending"
-                        r.rotation_at = None
-                        changed = True
-
         if changed:
             await db.commit()
             print("✔ Cleanup: expired/closed requests updated")

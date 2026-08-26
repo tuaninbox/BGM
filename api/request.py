@@ -609,69 +609,6 @@ async def email_approve_request(
         "req_id": req_id,
     }
 
-# No replay protection
-# @router.get("/requests/{req_id}/email-approve")
-# async def email_approve_request(
-#     req_id: int,
-#     token: str,
-#     request: Request,
-#     db: AsyncSession = Depends(get_db),
-# ):
-#     # Validate token
-#     result = validate_email_approval_token(token)
-#     if not result["ok"]:
-#         return {"ok": False, "error": result["error"]}
-
-#     if result["req_id"] != req_id:
-#         return {"ok": False, "error": "Token does not match request"}
-
-#     approver_id = result["approver_id"]
-
-#     # Load approver
-#     approver = await db.scalar(select(Account).where(Account.id == approver_id))
-#     if not approver:
-#         return {"ok": False, "error": "Approver not found"}
-
-#     # Load request
-#     req = await db.scalar(select(BreakglassRequest).where(BreakglassRequest.id == req_id))
-#     if not req:
-#         return {"ok": False, "error": "Request not found"}
-
-#     # Already approved?
-#     if req.status != "pending":
-#         return {"ok": False, "error": f"Request already {req.status}"}
-
-#     # Prevent self-approval
-#     if req.requester_id == approver_id:
-#         return {"ok": False, "error": "Cannot approve your own request"}
-
-#     # Approve
-#     req.status = "approved"
-#     req.approver_id = approver_id
-#     req.approver_username = approver.username
-#     req.approve_reason = "Approved via email link"
-#     req.approved_at = datetime.now(timezone.utc).isoformat()
-#     req.approval_method = "email"
-
-#     await db.commit()
-
-#     # Audit log
-#     log_action(
-#         approver,
-#         "breakglass_approve_email",
-#         f"Email approved request {req_id}",
-#         request,
-#         category="breakglass",
-#     )
-
-#     return {
-#         "ok": True,
-#         "method": "email",
-#         "approved_by": approver.username,
-#         "req_id": req_id,
-#     }
-
-
 @router.get("/requests/{req_id}/show-password")
 async def api_show_password(
     req_id: int,
@@ -736,6 +673,7 @@ async def api_show_password(
     if req.status != "used":
         req.status = "used"
         req.used_at = datetime.now(timezone.utc).isoformat()
+        req.rotation_status = "pending"
         await db.commit()
         await db.refresh(req)
 
@@ -815,6 +753,7 @@ async def api_copy_password(
     if req.status != "used":
         req.status = "used"
         req.used_at = datetime.now(timezone.utc).isoformat()
+        req.rotation_status = "pending"
         await db.commit()
         await db.refresh(req)
 
@@ -924,16 +863,28 @@ async def api_close_request(
     # Queue rotation
     # ---------------------------------------------------------
     req.status = "closed"
-    req.rotation_status = "pending"
-    req.rotation_at = None
-    req.rotation_error = None
+    # ---------------------------------------------------------
+    # Queue rotation ONLY if request was used
+    # ---------------------------------------------------------
+    if req.status == "used":
+        req.rotation_status = "pending"
+        req.rotation_at = None
+        req.rotation_error = None
+    else:
+        # approved → closed → never used → do NOT rotate
+        # leave rotation_status unchanged
+        pass
 
     await db.commit()
     await db.refresh(req)
 
     return {
         "ok": True,
-        "message": "Request closed and rotation queued",
+        "message": (
+            "Request closed and rotation queued"
+            if req.rotation_status == "pending"
+            else "Request closed (no rotation required)"
+        ),
         "req_id": req.id,
         "status": req.status,
         "rotation_status": req.rotation_status,

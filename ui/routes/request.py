@@ -822,7 +822,7 @@ async def ui_close_request(
     <div 
         class="bg-green-600 text-white px-4 py-2 rounded shadow-lg text-center animate-fade-in"
         hx-trigger="load"
-        hx-on="load: setTimeout(() => { 
+        hx-on="htmx:afterSwap: setTimeout(() => { 
             document.getElementById('toast-container').innerHTML = ''; 
             window.location.reload(); 
         }, 2000)"
