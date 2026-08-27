@@ -495,56 +495,118 @@ async def reject_request(
     current_user: Account = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Parse form or JSON
-    if request.headers.get("content-type", "").startswith("application/json"):
-        payload = await request.json()
-        reject_reason = payload.get("reject_reason")
-    else:
-        form = await request.form()
-        reject_reason = form.get("reject_reason")
+    roles = request.app.state.roles
 
-    form = await request.form()
-    reason = form.get("reject_reason", "")
+    # ----------------------------------------------------
+    # Parse JSON or form
+    # ----------------------------------------------------
+    try:
+        if request.headers.get("content-type", "").startswith("application/json"):
+            payload = await request.json()
+            reject_reason = payload.get("reject_reason")
+        else:
+            form = await request.form()
+            reject_reason = form.get("reject_reason")
+    except Exception as e:
+        log_action(
+            current_user,
+            "breakglass_reject_parse_error",
+            f"Failed to parse reject payload for request {req_id}: {e}",
+            request,
+            category="breakglass",
+        )
+        return {"ok": False, "error": "Invalid request payload"}
 
-    if not reason or not reason.strip():
+    # ----------------------------------------------------
+    # Validate reason
+    # ----------------------------------------------------
+    if not reject_reason or not reject_reason.strip():
+        log_action(
+            current_user,
+            "breakglass_reject_invalid_reason",
+            f"Reject reason missing or empty for request {req_id}",
+            request,
+            category="breakglass",
+        )
         return {"ok": False, "error": "Reason cannot be empty"}
+
+    # ----------------------------------------------------
     # Load request
+    # ----------------------------------------------------
     stmt = select(BreakglassRequest).where(BreakglassRequest.id == req_id)
     result = await db.execute(stmt)
     req = result.scalar_one_or_none()
 
     if not req:
-        raise HTTPException(404, "Request not found")
+        log_action(
+            current_user,
+            "breakglass_reject_not_found",
+            f"Reject failed: request {req_id} not found",
+            request,
+            category="breakglass",
+        )
+        return {"ok": False, "error": "Request not found"}
 
-    # Self-rejection forbidden (same rule as approval)
+    # ----------------------------------------------------
+    # Self-rejection forbidden
+    # ----------------------------------------------------
     if req.requester_id == current_user.id:
-        raise HTTPException(400, "You cannot reject your own request")
+        log_action(
+            current_user,
+            "breakglass_reject_self_forbidden",
+            f"Reject forbidden: user tried to reject own request {req_id}",
+            request,
+            category="breakglass",
+        )
+        return {"ok": False, "error": "You cannot reject your own request"}
 
-    # Only approvers can reject
+    # ----------------------------------------------------
+    # Role check
+    # ----------------------------------------------------
     if current_user.role not in ("approver", "requester_approver"):
-        raise HTTPException(403, "Forbidden")
+        log_action(
+            current_user,
+            "breakglass_reject_role_forbidden",
+            f"Reject forbidden: insufficient role for request {req_id}",
+            request,
+            category="breakglass",
+        )
+        return {"ok": False, "error": "Forbidden"}
 
+    # ----------------------------------------------------
     # Update request
+    # ----------------------------------------------------
     req.status = "rejected"
     req.approver_id = current_user.id
     req.approver_username = current_user.username
-    req.approve_reason = reject_reason
+    req.approve_reason = reject_reason.strip()
     req.approved_at = datetime.now(timezone.utc).isoformat()
     req.approval_method = "reject"
 
     await db.commit()
     await db.refresh(req)
 
+    # ----------------------------------------------------
     # Audit log
+    # ----------------------------------------------------
     log_action(
         current_user,
         "breakglass_reject",
-        f"Rejected request {req_id} for device {req.device_name}",
+        f"Rejected request {req_id} for device {req.device_name} "
+        f"(reason='{reject_reason.strip()}')",
         request,
         category="breakglass",
     )
 
-    return {"ok": True, "method": "reject"}
+    return {
+        "ok": True,
+        "method": "reject",
+        "request_id": req_id,
+        "device": req.device_name,
+        "approver": current_user.username,
+        "reason": reject_reason.strip(),
+    }
+
 
 
 @router.get("/requests/{req_id}/email-approve")

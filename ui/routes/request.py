@@ -6,6 +6,7 @@ from fastapi.responses import HTMLResponse, RedirectResponse, JSONResponse
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from core.vault import VaultClient
+from core.audit_logger import log_action
 
 from core.db import get_db
 from deps.auth import get_current_user_optional
@@ -22,86 +23,6 @@ templates = Jinja2Templates(directory="ui/templates")
 templates.env.globals["has_permission"] = has_permission
 templates.env.cache.clear()
 
-# Request without sorting
-# @router.get("/requests", response_class=HTMLResponse)
-# async def requests_page(
-#     request: Request,
-#     current_user: Account = Depends(get_current_user_optional),
-# ):
-#     # ---------------------------------------------------------
-#     # Session expired → redirect to login
-#     # ---------------------------------------------------------
-#     if current_user is None:
-#         return RedirectResponse("/ui/login")
-
-#     roles = request.app.state.roles
-
-#     # ---------------------------------------------------------
-#     # Frontend RBAC: must have read_requests permission
-#     # ---------------------------------------------------------
-#     if not has_permission(current_user.role, "read_requests", roles):
-#         return templates.TemplateResponse(
-#             "request.html",
-#             {
-#                 "request": request,
-#                 "current_user": current_user,
-#                 "requests": [],
-#                 "error": "Permission denied",
-#             },
-#         )
-
-#     # ---------------------------------------------------------
-#     # Call backend API
-#     # ---------------------------------------------------------
-#     api_url = f"{settings.backend_url}/api/requests"
-
-#     try:
-#         api_resp = await request.app.state.http_client.get(
-#             api_url,
-#             cookies=request.cookies
-#         )
-#     except Exception as e:
-#         return HTMLResponse(
-#             f"""
-#             <div class="p-4 bg-red-100 text-red-700 rounded">
-#                 Frontend error contacting backend: {str(e)}
-#             </div>
-#             """
-#         )
-
-#     # ---------------------------------------------------------
-#     # Parse backend JSON
-#     # ---------------------------------------------------------
-#     try:
-#         data = api_resp.json()
-#     except Exception:
-#         data = {"ok": False, "error": "Invalid backend response"}
-
-#     # ---------------------------------------------------------
-#     # Backend permission or other error
-#     # ---------------------------------------------------------
-#     if not data.get("ok", False):
-#         return templates.TemplateResponse(
-#             "request.html",
-#             {
-#                 "request": request,
-#                 "current_user": current_user,
-#                 "requests": [],
-#                 "error": data.get("error", "Unknown backend error"),
-#             },
-#         )
-
-#     # ---------------------------------------------------------
-#     # Success → render requests page
-#     # ---------------------------------------------------------
-#     return templates.TemplateResponse(
-#         "request.html",
-#         {
-#             "request": request,
-#             "current_user": current_user,
-#             "requests": data.get("requests", []),
-#         },
-#     )
 
 @router.get("/requests", response_class=HTMLResponse)
 async def requests_page(
@@ -469,49 +390,94 @@ async def ui_reject_request(
     req_id: int,
     request: Request,
     current_user: Account = Depends(get_current_user),
-    ):
+):
+    # ----------------------------------------------------
     # Session expired → redirect
+    # ----------------------------------------------------
     if not current_user:
         return Response(headers={"HX-Redirect": "/ui/login"}, status_code=200)
 
+    # ----------------------------------------------------
     # Parse form fields from HTMX modal
+    # ----------------------------------------------------
     form = await request.form()
-    reject_reason = form.get("reject_reason")
+    reject_reason = form.get("reject_reason", "").strip()
 
+    # ----------------------------------------------------
     # Backend API endpoint
+    # ----------------------------------------------------
     backend_url = f"{settings.backend_url}/api/requests/{req_id}/reject"
 
-    # Forward cookies for authentication
-    cookies = request.cookies
+    payload = {"reject_reason": reject_reason}
 
-    # Prepare payload for backend API
-    payload = {
-        "reject_reason": reject_reason,
-    }
-
+    # ----------------------------------------------------
     # Call backend API
+    # ----------------------------------------------------
     resp = await request.app.state.http_client.post(
         backend_url,
         json=payload,
-        cookies=cookies,
+        cookies=request.cookies,
     )
 
+    # ----------------------------------------------------
     # Session expired or forbidden
+    # ----------------------------------------------------
     if resp.status_code in (401, 403):
         return Response(headers={"HX-Redirect": "/ui/login"}, status_code=200)
 
-    data = resp.json()
-
-    # Backend returned error → show error inside modal
-    if "detail" in data:
+    # ----------------------------------------------------
+    # Parse backend JSON
+    # ----------------------------------------------------
+    try:
+        data = resp.json()
+    except Exception:
+        # Log parse error
+        log_action(
+            current_user,
+            "breakglass_reject_ui_parse_error",
+            f"UI reject: backend returned invalid JSON for request {req_id}",
+            request,
+            category="breakglass",
+        )
         return templates.TemplateResponse(
             "partials/reject_request.html",
             {
                 "request": request,
                 "req": {"id": req_id},
-                "error": data["detail"],
+                "error": "Backend returned invalid JSON",
             },
         )
+
+    # ----------------------------------------------------
+    # Backend returned error → show error inside modal
+    # ----------------------------------------------------
+    if not data.get("ok"):
+        log_action(
+            current_user,
+            "breakglass_reject_ui_error",
+            f"UI reject failed for request {req_id}: {data.get('error')}",
+            request,
+            category="breakglass",
+        )
+        return templates.TemplateResponse(
+            "partials/reject_request.html",
+            {
+                "request": request,
+                "req": {"id": req_id},
+                "error": data.get("error"),
+            },
+        )
+
+    # ----------------------------------------------------
+    # Success → log + HTMX redirect
+    # ----------------------------------------------------
+    log_action(
+        current_user,
+        "breakglass_reject_ui_success",
+        f"UI reject succeeded for request {req_id}",
+        request,
+        category="breakglass",
+    )
 
     return Response(
         headers={"HX-Redirect": "/ui/requests"},

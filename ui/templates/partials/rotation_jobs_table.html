@@ -1,29 +1,209 @@
 <div id="rotation-jobs-table">
-  <table class="min-w-full bg-white border rounded shadow text-sm">
-    <thead class="bg-gray-100 border-b">
-      <tr>
-        <th class="px-3 py-2">Request ID</th>
-        <th class="px-3 py-2">Device</th>
-        <th class="px-3 py-2">Account</th>
-        <th class="px-3 py-2">Status</th>
-        <th class="px-3 py-2">Retries</th>
-        <th class="px-3 py-2">Last Rotation</th>
-        <th class="px-3 py-2">Error</th>
-      </tr>
-    </thead>
 
-    <tbody>
-      {% for j in jobs %}
-      <tr class="border-b hover:bg-gray-50">
-        <td class="px-3 py-2">{{ j.id }}</td>
-        <td class="px-3 py-2">{{ j.device_name }}</td>
-        <td class="px-3 py-2">{{ j.account_username }}</td>
-        <td class="px-3 py-2">{{ j.rotation_status }}</td>
-        <td class="px-3 py-2">{{ j.rotation_retries }}</td>
-        <td class="px-3 py-2">{{ j.rotation_at }}</td>
-        <td class="px-3 py-2 text-red-600">{{ j.rotation_error }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
+<!-- Pagination + Page Size -->
+<div class="flex justify-end items-center mb-4 px-4">
+
+
+  <div class="flex items-center gap-6">
+    <!-- Rotation Status Filter -->
+    <div class="flex items-center gap-2">
+      <label class="text-sm text-gray-700 font-medium">Status:</label>
+
+      <select
+        name="status"
+        class="border rounded px-2 py-1 text-sm"
+        hx-get="/ui/rotation/jobs"
+        hx-target="#rotation-jobs-table"
+        hx-swap="innerHTML"
+        hx-trigger="change"
+        hx-include="[name=page],[name=page_size],[name=sort_by],[name=sort_dir]"
+      >
+        <option value="" {% if not status %}selected{% endif %}>All</option>
+        <option value="pending" {% if status == 'pending' %}selected{% endif %}>Pending</option>
+        <option value="queued" {% if status == 'queued' %}selected{% endif %}>Queued</option>
+        <option value="running" {% if status == 'running' %}selected{% endif %}>Running</option>
+        <option value="success" {% if status == 'success' %}selected{% endif %}>Success</option>
+        <option value="failed" {% if status == 'failed' %}selected{% endif %}>Failed</option>
+        <option value="not_required" {% if status == 'not_required' %}selected{% endif %}>Not Required</option>
+      </select>
+    </div>
+    <!-- Page Size -->
+    <div class="flex items-center gap-2">
+      <label class="text-sm text-gray-700 font-medium">Page Size:</label>
+
+      <select
+        id="rotation-page-size-select"
+        class="border rounded px-2 py-1 text-sm"
+        name="page_size"
+        onchange="
+          if (this.value === 'custom') {
+            document.getElementById('rotation-page-size-custom').classList.remove('hidden');
+          } else {
+            document.getElementById('rotation-page-size-custom').classList.add('hidden');
+            htmx.ajax(
+              'GET',
+              '/ui/rotation/jobs?page={{ page }}&page_size=' + this.value +
+              '&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}',
+              { target: '#rotation-jobs-table', swap: 'innerHTML' }
+            );
+          }
+        "
+      >
+        {% for size in [10,20,50,100] %}
+          <option value="{{ size }}" {% if page_size == size %}selected{% endif %}>{{ size }}</option>
+        {% endfor %}
+        <option value="custom" {% if page_size not in [10,20,50,100] %}selected{% endif %}>Custom…</option>
+      </select>
+
+      <input
+        id="rotation-page-size-custom"
+        type="number"
+        min="1"
+        max="500"
+        name="page_size"
+        value="{{ page_size }}"
+        class="border rounded px-2 py-1 w-20 text-sm {% if page_size in [10,20,50,100] %}hidden{% endif %}"
+        hx-get="/ui/rotation/jobs"
+        hx-target="#rotation-jobs-table"
+        hx-swap="innerHTML"
+        hx-trigger="change"
+        hx-include="[name=sort_by],[name=sort_dir],[name=page]"
+      />
+    </div>
+
+    <!-- Pagination -->
+    <div class="flex items-center gap-3">
+      {% if page > 1 %}
+        <button
+          hx-get="/ui/rotation/jobs?page={{ page - 1 }}&page_size={{ page_size }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}"
+          hx-target="#rotation-jobs-table"
+          hx-swap="innerHTML"
+          class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
+        >Previous</button>
+      {% else %}
+        <span class="px-3 py-1 bg-gray-100 text-gray-400 rounded">Previous</span>
+      {% endif %}
+
+      <span class="text-sm text-gray-600">
+        Page {{ page }} of {{ (total // page_size) + (1 if total % page_size else 0) }}
+      </span>
+
+      {% if page * page_size < total %}
+        <button
+          hx-get="/ui/rotation/jobs?page={{ page + 1 }}&page_size={{ page_size }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}"
+          hx-target="#rotation-jobs-table"
+          hx-swap="innerHTML"
+          class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
+        >Next</button>
+      {% else %}
+        <span class="px-3 py-1 bg-gray-100 text-gray-400 rounded">Next</span>
+      {% endif %}
+    </div>
+
+  </div>
+
+</div>
+<input type="hidden" name="page" value="{{ page }}">
+<input type="hidden" name="page_size" value="{{ page_size }}">
+<input type="hidden" name="sort_by" value="{{ sort_by }}">
+<input type="hidden" name="sort_dir" value="{{ sort_dir }}">
+
+
+<!-- TABLE -->
+<div class="w-full px-4">
+<div class="border rounded bg-white p-4">
+<div class="overflow-auto max-h-[75vh] relative">
+
+<table class="min-w-full border-collapse table-fixed">
+
+  <thead class="bg-gray-100 border-b sticky top-0 z-[60] shadow-sm">
+    <tr>
+
+      <!-- Request ID -->
+      <th class="px-3 py-2 text-left">
+        <a hx-get="/ui/rotation/jobs?page={{ page }}&page_size={{ page_size }}&sort_by=id&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
+           hx-target="#rotation-jobs-table"
+           hx-swap="innerHTML"
+           class="hover:underline cursor-pointer">
+          Request ID
+          {% if sort_by == "id" %}
+            {{ '↑' if sort_dir == 'asc' else '↓' }}
+          {% endif %}
+        </a>
+      </th>
+
+      <!-- Device -->
+      <th class="px-3 py-2 text-left">
+        <a hx-get="/ui/rotation/jobs?page={{ page }}&page_size={{ page_size }}&sort_by=device_name&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
+           hx-target="#rotation-jobs-table"
+           hx-swap="innerHTML"
+           class="hover:underline cursor-pointer">
+          Device
+          {% if sort_by == "device_name" %}
+            {{ '↑' if sort_dir == 'asc' else '↓' }}
+          {% endif %}
+        </a>
+      </th>
+
+      <!-- Account -->
+      <th class="px-3 py-2 text-left">
+        <a hx-get="/ui/rotation/jobs?page={{ page }}&page_size={{ page_size }}&sort_by=account_username&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
+           hx-target="#rotation-jobs-table"
+           hx-swap="innerHTML"
+           class="hover:underline cursor-pointer">
+          Account
+          {% if sort_by == "account_username" %}
+            {{ '↑' if sort_dir == 'asc' else '↓' }}
+          {% endif %}
+        </a>
+      </th>
+
+      <!-- Status -->
+      <th class="px-3 py-2 text-left">
+        <a hx-get="/ui/rotation/jobs?page={{ page }}&page_size={{ page_size }}&sort_by=rotation_status&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
+           hx-target="#rotation-jobs-table"
+           hx-swap="innerHTML"
+           class="hover:underline cursor-pointer">
+          Status
+          {% if sort_by == "rotation_status" %}
+            {{ '↑' if sort_dir == 'asc' else '↓' }}
+          {% endif %}
+        </a>
+      </th>
+
+       <!-- Last Rotation -->
+      <th class="px-3 py-2 text-left">
+        <a hx-get="/ui/rotation/jobs?page={{ page }}&page_size={{ page_size }}&sort_by=rotation_at&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
+           hx-target="#rotation-jobs-table"
+           hx-swap="innerHTML"
+           class="hover:underline cursor-pointer">
+          Last Rotation
+          {% if sort_by == "rotation_at" %}
+            {{ '↑' if sort_dir == 'asc' else '↓' }}
+          {% endif %}
+        </a>
+      </th>
+
+      <!-- Error -->
+      <th class="px-3 py-2 text-left">Error</th>
+
+    </tr>
+  </thead>
+
+  <tbody>
+    {% for j in jobs %}
+    <tr class="border-b hover:bg-gray-50">
+      <td class="px-3 py-2">{{ j.id }}</td>
+      <td class="px-3 py-2">{{ j.device_name }}</td>
+      <td class="px-3 py-2">{{ j.account_username }}</td>
+      <td class="px-3 py-2">{{ j.rotation_status }}</td>
+      <td class="px-3 py-2">{{ j.rotation_at }}</td>
+      <td class="px-3 py-2 text-red-600">{{ j.rotation_error }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+
+</table>
+
+</div></div></div>
 </div>

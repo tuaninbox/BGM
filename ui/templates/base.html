@@ -97,13 +97,13 @@
       </li>
     {% endif %}
     
-    <!-- Background Jobs (permission: read_background_jobs) -->
+    <!-- Background Jobs (permission: read_rotation_jobs) -->
     
-    {% if has_permission(current_user.role, "read_background_jobs", roles) %}
+    {% if has_permission(current_user.role, "read_rotation_jobs", roles) %}
       <li>
         <a href="/ui/rotation/jobs"
            class="text-gray-700 px-3 py-1 rounded-md transition hover:bg-blue-600 hover:text-white">
-          Background Jobs
+          Account Rotation
         </a>
       </li>
     {% endif %}

@@ -6,7 +6,7 @@ roles:
     - update_accounts
     - delete_accounts
     - read_logs
-    - read_background_jobs
+    - read_rotation_jobs
 
   requester_approver:
     - read_self_account
@@ -17,7 +17,7 @@ roles:
     - approve_bg_account
     - create_otp
     - access_dashboard
-    - read_background_jobs
+    - read_rotation_jobs
 
   approver:
     - read_self_account

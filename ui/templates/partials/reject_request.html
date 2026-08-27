@@ -2,7 +2,11 @@
   <div class="bg-white p-6 rounded shadow-lg w-96">
 
     <h2 class="text-xl font-bold mb-3">Reject Request</h2>
-
+    {% if error %}
+    <div class="mb-4 p-3 rounded bg-red-100 text-red-700 border border-red-300">
+      {{ error }}
+    </div>
+    {% endif %}
     <form hx-post="/ui/requests/{{ req.id }}/reject"
           hx-target="#modal"
           hx-swap="innerHTML">

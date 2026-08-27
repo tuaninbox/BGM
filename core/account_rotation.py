@@ -76,7 +76,7 @@ async def rotate_accounts_for_closed_requests():
                             await db.commit()
 
                             # Exponential backoff
-                            await asyncio.sleep(2 ** attempt)
+                            await asyncio.sleep(settings.rotation_backoff_seconds ** attempt)
 
                     except Exception as e:
                         r.rotation_status = "failed"

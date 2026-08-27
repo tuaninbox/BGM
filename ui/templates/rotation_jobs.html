@@ -4,7 +4,7 @@
 <div class="w-full px-4">
   <h1 class="text-2xl font-bold mb-6 text-center">Rotation Jobs</h1>
 
-  <form
+  <!-- <form
     class="bg-white border rounded shadow p-4 text-sm flex flex-wrap gap-6 items-end mb-6"
     hx-get="/ui/rotation/jobs"
     hx-target="#rotation-jobs-table"
@@ -22,7 +22,14 @@
         <option value="failed"   {% if status == "failed" %}selected{% endif %}>Failed</option>
       </select>
     </div>
-  </form>
+  </form> -->
+  <div
+    hx-get="/ui/rotation/jobs"
+    hx-trigger="every 5s"
+    hx-target="#rotation-jobs-table"
+    hx-swap="outerHTML"
+    hx-include="[name=page],[name=page_size],[name=sort_by],[name=sort_dir],[name=status]"
+  ></div>
 
   {% include "partials/rotation_jobs_table.html" %}
 </div>
