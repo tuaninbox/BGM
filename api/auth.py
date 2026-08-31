@@ -21,76 +21,136 @@ from core.security import (
 router = APIRouter(prefix="/api", tags=["auth"])
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login")
 async def login(
     data: LoginRequest,
     request: Request,
     current_user: Account | None = Depends(get_current_user_optional),
     db: AsyncSession = Depends(get_db)
 ):
-    ip = request.client.host
+    try:
+        ip = request.client.host
 
-    if not data.username or not data.password:
-        raise HTTPException(400, "Username and Password are required")
+        # ---------------------------------------------------------
+        # Validate input
+        # ---------------------------------------------------------
+        if not data.username or not data.password:
+            return {
+                "ok": False,
+                "error": "Username and Password are required",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
 
-    username = data.username
+        username = data.username
 
-    if await too_many_attempts(ip, username):
+        # ---------------------------------------------------------
+        # Brute-force protection
+        # ---------------------------------------------------------
+        if await too_many_attempts(ip, username):
+            log_action(
+                current_user.username if current_user else None,
+                "login_attempt",
+                f"Too many failed login attempts for username: {username}",
+                request,
+                category="authentication",
+            )
+            return {
+                "ok": False,
+                "error": "Too many failed login attempts. Try again later.",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+
+        # ---------------------------------------------------------
+        # Lookup user
+        # ---------------------------------------------------------
+        stmt = select(Account).where(Account.username == username)
+        result = await db.execute(stmt)
+        user = result.scalar_one_or_none()
+
+        if not user or not verify_password(data.password, user.password_hash):
+            record_failed_attempt(ip, username)
+            log_action(
+                current_user.username if current_user else None,
+                "login_attempt",
+                f"Invalid credentials for username: {username}",
+                request,
+                category="authentication",
+            )
+            return {
+                "ok": False,
+                "error": "Invalid credentials",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
+
+        # ---------------------------------------------------------
+        # Successful login
+        # ---------------------------------------------------------
+        clear_attempts(ip, username)
+
         log_action(
             current_user.username if current_user else None,
-            "login_attempt",
-            f"Too many failed login attempts for username: {username}",
+            "login_success",
+            f"Successful Login for username: {username}",
             request,
             category="authentication",
         )
-        raise HTTPException(429, "Too many failed login attempts. Try again later.")
 
-    stmt = select(Account).where(Account.username == username)
-    result = await db.execute(stmt)
-    user = result.scalar_one_or_none()
+        # ---------------------------------------------------------
+        # Create JWT
+        # ---------------------------------------------------------
+        try:
+            token = create_access_token({"sub": str(user.id), "role": user.role})
+        except Exception as e:
+            logger.error(f"Token creation failed: {e}")
+            return {
+                "ok": False,
+                "error": "Internal error generating token",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
 
-    if not user or not verify_password(data.password, user.password_hash):
-        record_failed_attempt(ip, username)
-        log_action(
-            current_user.username if current_user else None,
-            "login_attempt",
-            f"Invalid credentials for username: {username}",
-            request,
-            category="authentication",
-        )
-        raise HTTPException(401, "Invalid credentials")
+        # ---------------------------------------------------------
+        # Store session in DB
+        # ---------------------------------------------------------
+        try:
+            expires_at = datetime.now(timezone.utc) + timedelta(hours=12)
 
-    clear_attempts(ip, username)
+            session = Session(
+                token=token,
+                user_id=user.id,
+                expires_at=expires_at.isoformat()
+            )
 
-    log_action(
-        current_user.username if current_user else None,
-        "login_success",
-        f"Successful Login for username: {username}",
-        request,
-        category="authentication",
-    )
+            db.add(session)
+            await db.commit()
+        except Exception as e:
+            logger.error(f"Session creation failed: {e}")
+            return {
+                "ok": False,
+                "error": "Internal error creating session",
+                "timestamp": datetime.now(timezone.utc).isoformat()
+            }
 
-    token = create_access_token({"sub": str(user.id), "role": user.role})
+        # ---------------------------------------------------------
+        # Final JSON response
+        # ---------------------------------------------------------
+        return {
+            "ok": True,
+            "access_token": token,
+            "token_type": "bearer",
+            "expires_at": expires_at.isoformat()
+        }
 
-    # Store session in DB
-    expires_at = (datetime.now(timezone.utc) + timedelta(hours=12)).isoformat()
+    except Exception as e:
+        # Catch-all safety net
+        logger.error(f"Unexpected login error: {e}")
 
-    session = Session(
-        token=token,
-        user_id=user.id,
-        expires_at=expires_at
-    )
-    db.add(session)
-    await db.commit()
+        return {
+            "ok": False,
+            "error": "Unexpected backend error",
+            "details": str(e),  # optional: remove if you don't want frontend to see details
+            "timestamp": datetime.now(timezone.utc).isoformat()
+        }
 
-    expires_at_dt = datetime.fromisoformat(session.expires_at)
-
-    if expires_at_dt < datetime.now(timezone.utc):
-        await db.delete(session)
-        await db.commit()
-
-    # Backend returns JSON only — frontend sets cookie
-    return Token(access_token=token, token_type="bearer")
 
 @router.post("/logout")
 async def logout(request: Request, db: AsyncSession = Depends(get_db)):

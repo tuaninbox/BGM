@@ -286,7 +286,7 @@ async def send_rotation_summary(db: AsyncSession, period: str = "weekly"):
         user="system"
     )
 
-def send_approval_email(
+async def send_approval_email(
     email: str,
     device_name: str,
     requester: str,
@@ -330,7 +330,7 @@ This link expires in {settings.email_approval_token_expiry_minutes} minutes.
         return
 
     # Real email mode
-    send_email(
+    await send_email(
         to=email,
         subject=subject,
         body=html_body,

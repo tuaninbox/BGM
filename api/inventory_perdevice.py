@@ -253,261 +253,176 @@ async def list_devices(
             "page_size": page_size,
         }
 
-@router.get("/groups")
-async def list_groups(
-    request: Request,
-    current_user: Account = Depends(get_current_user),
-    db: AsyncSession = Depends(get_db),
-    page: int = 1,
-    page_size: int = 20,
-    sort_by: str = "name",
-    sort_dir: str = "asc",
-):
-    roles = request.app.state.roles
 
-    # ---------------------------------------------------
-    # Permission check
-    # ---------------------------------------------------
-    if not has_permission(current_user.role, "read_devices", roles):
-        log_action(
-            current_user,
-            "group_view_denied",
-            f"Group View - Permission denied (read_devices)",
-            request,
-            category="group",
-        )
-        return {
-            "ok": False,
-            "error": "Permission denied: read_devices",
-            "groups": [],
-            "total": 0,
-            "page": page,
-            "page_size": page_size,
-        }
+# Device without pagination
+# @router.get("/devices")
+# async def list_devices(
+#     request: Request,
+#     current_user: Account = Depends(get_current_user),
+#     db: AsyncSession = Depends(get_db),
+# ):
+#     config = request.app.state.config
+#     tenant = current_user.tenant
 
-    config = request.app.state.config
-    tenant = current_user.tenant
+#     # -------------------------------
+#     # Tenant validation
+#     # -------------------------------
+#     if "tenants" not in config or tenant not in config["tenants"]:
+#         return {"ok": False, "error": f"Tenant '{tenant}' not found in config", "devices": []}
 
-    # ---------------------------------------------------
-    # Tenant validation
-    # ---------------------------------------------------
-    if "tenants" not in config or tenant not in config["tenants"]:
-        log_action(
-            current_user,
-            "group_view_error",
-            f"Tenant '{tenant}' not found in config",
-            request,
-            category="group",
-        )
-        return {
-            "ok": False,
-            "error": f"Tenant '{tenant}' not found in config",
-            "groups": [],
-            "total": 0,
-            "page": page,
-            "page_size": page_size,
-        }
+#     tenant_cfg = config["tenants"][tenant]
 
-    tenant_cfg = config["tenants"][tenant]
+#     if "devices" not in tenant_cfg:
+#         return {"ok": False, "error": f"Tenant '{tenant}' missing devices config", "devices": []}
 
-    if "devices" not in tenant_cfg:
-        log_action(
-            current_user,
-            "group_view_error",
-            f"Tenant '{tenant}' missing devices config",
-            request,
-            category="group",
-        )
-        return {
-            "ok": False,
-            "error": f"Tenant '{tenant}' missing devices config",
-            "groups": [],
-            "total": 0,
-            "page": page,
-            "page_size": page_size,
-        }
+#     devices_cfg = tenant_cfg["devices"]
+#     source = devices_cfg["source"]
 
-    devices_cfg = tenant_cfg["devices"]
-    source = devices_cfg["source"]
+#     try:
+#         has_approver = False
 
-    try:
-        # ---------------------------------------------------
-        # Load devices (still needed to build device_list)
-        # ---------------------------------------------------
-        if source not in ("nagios", "file", "netbox"):
-            log_action(
-                current_user,
-                "group_view_error",
-                f"Invalid device source '{source}'",
-                request,
-                category="group",
-            )
-            return {
-                "ok": False,
-                "error": f"Invalid device source '{source}'",
-                "groups": [],
-                "total": 0,
-                "page": page,
-                "page_size": page_size,
-            }
+#         # -------------------------------
+#         # Load devices (Nagios or file)
+#         # -------------------------------
+#         if source in ("nagios", "file"):
+#             devices = await load_devices(config, tenant)
 
-        devices = await load_devices(config, tenant)
+#             # -------------------------------
+#             # Vault lookup (breakglass accounts)
+#             # -------------------------------
+#             bg_lookup = {}
+#             try:
+#                 vault = VaultClient(config, tenant="NCP")
+#                 bgaccounts = await vault.get_breakglass_accounts()
+#                 bg_lookup = {item["device"]: item for item in bgaccounts}
+#             except Exception as e:
+#                 print(f"Failed to retrieve breakglass accounts: {str(e)}")
 
-        # ---------------------------------------------------
-        # Build groups from device inventory
-        # ---------------------------------------------------
-        groups_map = {}  # group → list of devices
+#             merged_devices = []
+#             now_dt = datetime.now(timezone.utc)
 
-        for dev in devices:
-            grp = dev.get("group") or dev.get("Group")
-            if not grp:
-                continue
-            grp = grp.lower()
-            groups_map.setdefault(grp, []).append(dev["name"])
+#             # -------------------------------
+#             # Build device list
+#             # -------------------------------
+#             for dev in devices:
+#                 name = dev["name"]
+#                 bg = bg_lookup.get(name)
+#                 username = bg["username"] if bg else None
 
-        # ---------------------------------------------------
-        # Load Vault group credentials
-        # ---------------------------------------------------
-        vault = None
-        vault_groups = {}
+#                 # -------------------------------
+#                 # Fetch ALL requests for this device/user
+#                 # -------------------------------
+#                 reqs = await db.execute(
+#                     select(BreakglassRequest).where(
+#                         BreakglassRequest.device_name == name,
+#                         BreakglassRequest.account_username == username,
+#                         BreakglassRequest.requester_id == current_user.id
+#                     ).order_by(BreakglassRequest.id.desc())
+#                 )
+#                 rows = reqs.scalars().all()
 
-        try:
-            vault = VaultClient(config, tenant="NCP")
-            bgaccounts = await vault.get_breakglass_accounts()
+#                 # -------------------------------
+#                 # Find active request (Python-side comparison)
+#                 # -------------------------------
+#                 active_request = None
+#                 for r in rows:
+#                     # if settings.debug:
+#                     #     print(f"api/inventory/listdevices - request: {r}")
+#                     end_dt = parse_iso8601(r.end_time)
+#                     if end_dt and end_dt >= now_dt:
+#                         active_request = r
+#                         break
 
-            # bgaccounts now contains group credentials
-            for item in bgaccounts:
-                group_name = item["group"]
-                vault_groups[group_name] = item
-        except Exception as e:
-            log_action(
-                current_user,
-                "group_view_warning",
-                f"Vault lookup failed: {str(e)}",
-                request,
-                category="group",
-            )
+#                 # -------------------------------
+#                 # Build request info
+#                 # -------------------------------
+#                 request_info = None
+#                 if active_request:
+#                     request_info = {
+#                         "id": active_request.id,
+#                         "status": active_request.status,
+#                         "start_time": active_request.start_time,
+#                         "end_time": active_request.end_time,
+#                         "requester_username": active_request.requester_username,
+#                         "approver_username": active_request.approver_username,
+#                     }
+#                 # if settings.debug:
+#                 #     print(f"api/inventory/listdevices - request_info: {request_info}")
+#                 merged_devices.append({
+#                     **dev,
+#                     "username": username,
+#                     "request": request_info
+#                 })
 
-        # ---------------------------------------------------
-        # Build merged group list
-        # ---------------------------------------------------
-        merged_groups = []
-        now_dt = datetime.now(timezone.utc)
+#         else:
+#             return {
+#                 "ok": False,
+#                 "error": f"Invalid device source '{source}' for tenant '{tenant}'",
+#                 "devices": []
+#             }
 
-        for group_name, device_list in groups_map.items():
-            vault_entry = vault_groups.get(group_name, {})
-            username = vault_entry.get("username")
-            password = vault_entry.get("password")
+#         # -------------------------------
+#         # Approver check
+#         # -------------------------------
+#         try:
+#             stmt = select(Account).where(
+#                 Account.role.in_(["approver", "requester_approver"]),
+#                 Account.otp_enabled == True
+#             )
+#             result = await db.execute(stmt)
+#             approver_count = len(result.scalars().all())
+#             has_approver = approver_count > 0
+#             # if settings.debug:
+#             #     print(f"api/inventory/listdevices - merged devices: {merged_devices}")
+#             return {
+#                 "ok": True,
+#                 "count": len(devices),
+#                 "devices": merged_devices,
+#                 "has_approver": has_approver
+#             }
 
-            # ---------------------------------------------------
-            # Fetch active breakglass request for this group
-            # ---------------------------------------------------
-            reqs = await db.execute(
-                select(BreakglassRequest)
-                .where(
-                    BreakglassRequest.group_name == group_name,
-                    BreakglassRequest.account_username == username,
-                    BreakglassRequest.requester_id == current_user.id,
-                )
-                .order_by(BreakglassRequest.id.desc())
-            )
-            rows = reqs.scalars().all()
+#         except Exception:
+#             return {
+#                 "ok": True,
+#                 "count": len(devices),
+#                 "devices": merged_devices,
+#             }
 
-            active_request = None
-            for r in rows:
-                end_dt = parse_iso8601(r.end_time)
-                if end_dt and end_dt >= now_dt:
-                    active_request = r
-                    break
+#     except Exception as e:
+#         return {
+#             "ok": False,
+#             "error": f"Failed to load devices for tenant '{tenant}': {str(e)}",
+#             "devices": []
+#         }
 
-            request_info = None
-            if active_request:
-                request_info = {
-                    "id": active_request.id,
-                    "status": active_request.status,
-                    "start_time": active_request.start_time,
-                    "end_time": active_request.end_time,
-                    "requester_username": active_request.requester_username,
-                    "approver_username": active_request.approver_username,
-                }
+# @router.get("/devices")
+# async def list_devices(
+#     request: Request,
+#     current_user: Account = Depends(get_current_user),
+# ):
+#     cfg = request.app.state.config
+#     source = cfg["devices"]["source"]
 
-            merged_groups.append({
-                "name": group_name,
-                "username": username,
-                "password": password,
-                "device_list": device_list,
-                "request": request_info,
-            })
+#     if source not in ("file", "nagios"):
+#         return {
+#             "ok": False,
+#             "error": "Invalid device source configuration",
+#             "devices": []
+#         }
 
-        # ---------------------------------------------------
-        # Sorting
-        # ---------------------------------------------------
-        valid_sort_fields = {"name"}
-        if sort_by not in valid_sort_fields:
-            sort_by = "name"
-
-        reverse = sort_dir == "desc"
-        merged_groups.sort(key=lambda g: g.get(sort_by, ""), reverse=reverse)
-
-        # ---------------------------------------------------
-        # Pagination
-        # ---------------------------------------------------
-        total = len(merged_groups)
-        start = (page - 1) * page_size
-        end = start + page_size
-        paged_groups = merged_groups[start:end]
-
-        # ---------------------------------------------------
-        # Approver check
-        # ---------------------------------------------------
-        stmt = select(Account).where(
-            Account.role.in_(["approver", "requester_approver"]),
-            Account.otp_enabled == True,
-        )
-        result = await db.execute(stmt)
-        has_approver = len(result.scalars().all()) > 0
-
-        # ---------------------------------------------------
-        # Log success
-        # ---------------------------------------------------
-        log_action(
-            current_user,
-            "group_view",
-            f"Group View - Loaded {len(paged_groups)} groups (page {page})",
-            request,
-            category="group",
-        )
-
-        # ---------------------------------------------------
-        # Final response
-        # ---------------------------------------------------
-        return {
-            "ok": True,
-            "groups": paged_groups,
-            "total": total,
-            "page": page,
-            "page_size": page_size,
-            "sort_by": sort_by,
-            "sort_dir": sort_dir,
-            "has_approver": has_approver,
-        }
-
-    except Exception as e:
-        log_action(
-            current_user,
-            "group_view_error",
-            f"Exception: {str(e)}",
-            request,
-            category="group",
-        )
-        return {
-            "ok": False,
-            "error": f"Failed to load groups: {str(e)}",
-            "groups": [],
-            "total": 0,
-            "page": page,
-            "page_size": page_size,
-        }
+#     try:
+#         devices = load_devices_from_file(cfg["devices"]["file_path"])
+#         return {
+#             "ok": True,
+#             "count": len(devices),
+#             "devices": devices
+#         }
+#     except Exception as e:
+#         return {
+#             "ok": False,
+#             "error": f"Failed to load devices: {str(e)}",
+#             "devices": []
+#         }
 
 
 @router.post("/devices/sync")
@@ -579,3 +494,118 @@ async def sync_devices_from_nagios(
         "devices": devices
     }
 
+# @router.post("/devices/sync")
+# async def sync_devices_from_nagios(
+#     request: Request,
+#     current_user: Account = Depends(get_current_user),
+# ):
+#     roles = request.app.state.roles
+
+#     # Permission check
+#     if not has_permission(current_user.role, "sync_nagios", roles):
+#         log_action(
+#             current_user.username,
+#             "device_sync",
+#             "Nagios Sync - Permission Denied",
+#             request,
+#             category="inventory",
+#         )
+#         return {
+#             "ok": False,
+#             "error": "Permission denied"
+#         }
+
+#     cfg = request.app.state.config
+
+#     # Try sync
+#     try:
+#         devices = await load_devices(cfg)
+#     except Exception as e:
+#         log_action(
+#             current_user.username,
+#             "device_sync",
+#             f"Nagios Sync - Failed: {str(e)}",
+#             request,
+#             category="inventory",
+#         )
+#         return {
+#             "ok": False,
+#             "error": f"Failed to sync devices from Nagios: {str(e)}"
+#         }
+
+#     # Validate result
+#     if not devices or len(devices) == 0:
+#         log_action(
+#             current_user.username,
+#             "device_sync",
+#             "Nagios Sync - Returned empty device list",
+#             request,
+#             category="inventory",
+#         )
+#         return {
+#             "ok": False,
+#             "error": "No devices returned from Nagios"
+#         }
+
+#     # Success
+#     log_action(
+#         current_user.username,
+#         "device_sync",
+#         f"Nagios Sync - Success ({len(devices)} devices)",
+#         request,
+#         category="inventory",
+#     )
+
+#     return {
+#         "ok": True,
+#         "count": len(devices),
+#         "devices": devices
+#     }
+
+
+
+# ---------------------------------------------------------
+# NAGIOS SYNC
+# ---------------------------------------------------------
+# @router.post("/nagios/sync")
+# async def sync_devices_from_nagios(
+#     hostgroup_name: str,
+#     current_user: Account = Depends(get_current_user),
+# ):
+#     if current_user.role != "admin":
+#         raise HTTPException(status_code=403, detail="Only admin can sync devices")
+
+#     # Load devices directly from Nagios
+#     devices_data = await get_hosts_from_hostgroup(hostgroup_name)
+
+#     # Log sync event (no DB write)
+#     for d in devices_data:
+#         log_event(
+#             "DEVICE_SYNCED_FROM_NAGIOS",
+#             name=d.get("name"),
+#             hostgroup=hostgroup_name
+#         )
+
+#     return devices_data
+
+
+# # ---------------------------------------------------------
+# # IMPORT LOCAL DEVICES 
+# # ---------------------------------------------------------
+# @router.post("/import-local")
+# async def import_local_devices(
+#     items: list[dict],
+#     current_user: Account = Depends(get_current_user),
+# ):
+#     if current_user.role != "admin":
+#         raise HTTPException(status_code=403, detail="Only admin can import devices")
+
+#     # Log import events (no DB write)
+#     for item in items:
+#         log_event(
+#             "DEVICE_IMPORTED_LOCAL",
+#             name=item.get("name")
+#         )
+
+#     # Just return the items back
+#     return items

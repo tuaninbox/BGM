@@ -18,7 +18,7 @@ router = APIRouter(prefix="/ui", tags=["ui"])
 templates = Jinja2Templates(directory="ui/templates")
 templates.env.cache.clear()
 
-# ========================== Separated ==========================
+
 @router.get("/login", response_class=HTMLResponse)
 async def login_page(request: Request, 
     current_user: Account | None = Depends(get_current_user_optional),):
@@ -39,9 +39,7 @@ async def login_submit(
     username: str | None = Form(None),
     password: str | None = Form(None),
 ):
-
-
-    # Both missing
+    # Validate input
     if not username or not password:
         return templates.TemplateResponse(
             "login.html",
@@ -63,45 +61,52 @@ async def login_submit(
     backend_login_url = f"{settings.backend_url}/api/login"
 
     # Call backend API
-    api_resp = await request.app.state.http_client.post(
-        backend_login_url,
-        json={"username": username, "password": password}
-    )
-
-    # -----------------------------
-    # Handle LOCKOUT (429)
-    # -----------------------------
-    if api_resp.status_code == 429:
+    try:
+        api_resp = await request.app.state.http_client.post(
+            backend_login_url,
+            json={"username": username, "password": password}
+        )
+    except Exception as e:
+        # Backend unreachable or network error
         return templates.TemplateResponse(
             "login.html",
             {
                 "request": request,
-                "error": "Too many failed attempts. Your account is locked for 10 minutes."
+                "error": f"Backend error: {str(e)}"
             },
-            status_code=429,
+            status_code=500,
         )
 
-    # -----------------------------
-    # Handle invalid login (401)
-    # -----------------------------
-    if api_resp.status_code != 200:
+    # Parse JSON safely
+    try:
+        data = api_resp.json()
+    except Exception:
         return templates.TemplateResponse(
             "login.html",
             {
                 "request": request,
-                "error": "Invalid username or password"
+                "error": "Invalid response from backend"
             },
-            status_code=401,
+            status_code=500,
         )
 
-    # -----------------------------
+    # Backend returned JSON error
+    if not data.get("ok"):
+        backend_error = data.get("error", "Unknown backend error")
+
+        return templates.TemplateResponse(
+            "login.html",
+            {
+                "request": request,
+                "error": backend_error
+            },
+            status_code=400,
+        )
+
     # Successful login
-    # -----------------------------
-    data = api_resp.json()
     token = data["access_token"]
 
-    redirect_url = "/ui/devices"
-    response = RedirectResponse(url=redirect_url, status_code=302)
+    response = RedirectResponse("/ui/devices", status_code=302)
 
     response.set_cookie(
         key="session",

@@ -175,158 +175,98 @@ async def devices_page(
         },
     )
 
-@router.get("/groups", response_class=HTMLResponse)
-async def groups_page(
-    request: Request,
-    current_user: Account | None = Depends(get_current_user_optional),
-    page: int = 1,
-    page_size: str = "20",
-    sort_by: str = "name",
-    sort_dir: str = "asc",
-):
-    # -----------------------------------------
-    # Not logged in → redirect + log
-    # -----------------------------------------
-    if current_user is None:
-        log_action(
-            current_user,
-            "group_view",
-            f"Group View - Unauthorized access attempt",
-            request,
-            category="group",
-        )
-        return RedirectResponse("/ui/login")
+# Devices without pagination
+# @router.get("/devices", response_class=HTMLResponse)
+# async def devices_page(
+#     request: Request,
+#     current_user: Account | None = Depends(get_current_user_optional),
+# ):
+#     if current_user is None:
+#         log_action(
+#             current_user,
+#             "device_view",
+#             f"Device View - View Device page - Unauthorized",
+#             request,
+#             category="device",
+#         )  
+#         return RedirectResponse("/ui/login")
 
-    try:
-        if page_size == "custom":
-            page_size_int = 20   # fallback default
-        else:
-            page_size_int = int(page_size)
-    except ValueError:
-        page_size_int = 20
+#     # Load devices from backend API
+#     api_url = f"{settings.backend_url}/api/devices"
 
-    # -----------------------------------------
-    # Build backend API URL
-    # -----------------------------------------
-    api_url = (
-        f"{settings.backend_url}/api/groups"
-        f"?page={page}&page_size={page_size_int}"
-        f"&sort_by={sort_by}&sort_dir={sort_dir}"
-    )
+#     # Forward user cookies to API
+#     cookies = request.cookies
 
-    api_resp = await request.app.state.http_client.get(
-        api_url,
-        cookies=request.cookies
-    )
+#     api_resp = await request.app.state.http_client.get(
+#         api_url,
+#         cookies=cookies
+#     )
 
-    # -----------------------------------------
-    # Parse JSON safely
-    # -----------------------------------------
-    try:
-        data = api_resp.json()
-    except Exception:
-        log_action(
-            current_user,
-            "group_view",
-            "Group View - Backend returned invalid JSON",
-            request,
-            category="group",
-        )
-        return templates.TemplateResponse(
-            "devices.html",
-            {
-                "request": request,
-                "current_user": current_user,
-                "groups": [],
-                "error": "Backend returned invalid JSON",
-                "page": page,
-                "page_size": page_size,
-                "sort_by": sort_by,
-                "sort_dir": sort_dir,
-                "total": 0,
-            },
-            status_code=500,
-        )
+#     # Parse JSON safely
+#     try:
+#         data = api_resp.json()
 
-    # -----------------------------------------
-    # Backend error response
-    # -----------------------------------------
-    if not data.get("ok"):
-        log_action(
-            current_user,
-            "group_view",
-            f"Group View - Backend error: {data.get('error')}",
-            request,
-            category="group",
-        )
-        return templates.TemplateResponse(
-            "devices.html",
-            {
-                "request": request,
-                "current_user": current_user,
-                "groups": [],
-                "error": data.get("error"),
-                "page": page,
-                "page_size": page_size_int,
-                "sort_by": sort_by,
-                "sort_dir": sort_dir,
-                "total": 0,
-            },
-            status_code=500,
-        )
+#     except Exception:
+#         log_action(
+#             current_user,
+#             "device_view",
+#             "Device View - Backend returned invalid JSON",
+#             request,
+#             category="device",
+#         )
+#         return templates.TemplateResponse(
+#             "devices.html",
+#             {
+#                 "request": request,
+#                 "current_user": current_user,
+#                 "devices": [],
+#                 "error": "Backend returned invalid JSON"
+#             },
+#             status_code=500,
+#         )
 
-    # -----------------------------------------
-    # Extract group list
-    # -----------------------------------------
-    groups = data.get("groups", [])
-    total = data.get("total", 0)
+#     # Handle backend error response
+#     if not data.get("ok"):
+#         log_action(
+#             current_user,
+#             "device_view",
+#             f"Device View - Backend error: {data.get('error')}",
+#             request,
+#             category="device",
+#         )
+#         return templates.TemplateResponse(
+#             "devices.html",
+#             {
+#                 "request": request,
+#                 "current_user": current_user,
+#                 "devices": [],
+#                 "error": data.get("error"),
+#             },
+#             status_code=500,
+#         )
 
-    # -----------------------------------------
-    # HTMX partial load
-    # -----------------------------------------
-    if request.headers.get("HX-Request"):
-        log_action(
-            current_user,
-            "group_view",
-            f"Group View - HTMX partial load (page={page}, size={page_size_int}, sort={sort_by}:{sort_dir})",
-            request,
-            category="group",
-        )
-        return templates.TemplateResponse(
-            "partials/devices_table.html",
-            {
-                "request": request,
-                "current_user": current_user,
-                "groups": groups,
-                "total": total,
-                "page": page,
-                "page_size": page_size_int,
-                "sort_by": sort_by,
-                "sort_dir": sort_dir,
-            },
-        )
+#     # Extract device list
+#     devices = data.get("devices", [])
+#     has_approver = data.get("has_approver")
 
-    # -----------------------------------------
-    # Full page load
-    # -----------------------------------------
-    log_action(
-        current_user,
-        "group_view",
-        f"Group View - Full page load (page={page}, size={page_size_int}, sort={sort_by}:{sort_dir})",
-        request,
-        category="group",
-    )
+#     # Log success
+#     log_action(
+#         current_user,
+#         "device_view",
+#         "Device View - Logged-in user view device page",
+#         request,
+#         category="device",
+#     )
+#     # print(f"Request: {devices.request}")
 
-    return templates.TemplateResponse(
-        "devices.html",
-        {
-            "request": request,
-            "current_user": current_user,
-            "groups": groups,
-            "total": total,
-            "page": page,
-            "page_size": page_size_int,
-            "sort_by": sort_by,
-            "sort_dir": sort_dir,
-        },
-    )
+#     # Render template
+#     return templates.TemplateResponse(
+#         "devices.html",
+#         {
+#             "request": request,
+#             "current_user": current_user,
+#             "devices": devices,
+#             "has_approver": has_approver,
+#         },
+#     )
+

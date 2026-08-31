@@ -1,0 +1,63 @@
+name: Vault Sync on Inventory Change
+
+on:
+  push:
+    paths:
+      - "inventory/**"
+  pull_request:
+    paths:
+      - "inventory/**"
+
+jobs:
+  vault-sync:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Detect tenant from changed files
+      id: tenant
+      run: |
+        # Find first changed CSV file under inventory/<tenant>/
+        FILE=$(git diff --name-only HEAD~1 HEAD | grep "^inventory/.*/devices.csv" | head -n 1)
+
+        if [ -z "$FILE" ]; then
+          echo "No inventory CSV changed. Exiting."
+          echo "tenant=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+
+        # Extract tenant name: inventory/<tenant>/devices.csv
+        TENANT=$(echo "$FILE" | cut -d'/' -f2 | tr '[:upper:]' '[:lower:]')
+
+        echo "Detected tenant: $TENANT"
+        echo "tenant=$TENANT" >> $GITHUB_OUTPUT
+
+    - name: Stop if no tenant detected
+      if: steps.tenant.outputs.tenant == ''
+      run: echo "No tenant found, skipping workflow."
+
+    - name: Install Python dependencies
+      if: steps.tenant.outputs.tenant != ''
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install hvac requests
+
+    - name: Run provisioning script (dry-run for PR)
+      if: github.event_name == 'pull_request' && steps.tenant.outputs.tenant != ''
+      env:
+        VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+        VAULT_ROLE_ID: ${{ secrets.VAULT_ROLE_ID }}
+        VAULT_SECRET_ID: ${{ secrets.VAULT_SECRET_ID }}
+      run: |
+        python3 scripts/provision_secrets.py --tenant "${{ steps.tenant.outputs.tenant }}" --dry-run
+
+    - name: Run provisioning script (full sync on push)
+      if: github.event_name == 'push' && steps.tenant.outputs.tenant != ''
+      env:
+        VAULT_ADDR: ${{ secrets.VAULT_ADDR }}
+        VAULT_ROLE_ID: ${{ secrets.VAULT_ROLE_ID }}
+        VAULT_SECRET_ID: ${{ secrets.VAULT_SECRET_ID }}
+      run: |
+        python3 scripts/provision_secrets.py --tenant "${{ steps.tenant.outputs.tenant }}"

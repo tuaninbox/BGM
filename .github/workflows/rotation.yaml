@@ -1,0 +1,86 @@
+name: Vault Rotation Pipeline
+
+on:
+  workflow_dispatch:
+    inputs:
+      tenant:
+        description: "Tenant to rotate"
+        required: true
+        type: string
+      groups:
+        description: "Comma-separated groups (optional, empty = all)"
+        required: false
+        type: string
+  schedule:
+    - cron: "0 3 * * 1"  # every Monday 03:00
+
+jobs:
+  rotate:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Install Python dependencies
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install hvac requests
+
+    - name: Run Script A (Cloud rotation)
+      id: script_a
+      env:
+        VAULT_ADDR_CLOUD: ${{ secrets.VAULT_ADDR_CLOUD }}
+        VAULT_ROLE_ID_CLOUD: ${{ secrets.VAULT_ROLE_ID_CLOUD }}
+        VAULT_SECRET_ID_CLOUD: ${{ secrets.VAULT_SECRET_ID_CLOUD }}
+      run: |
+        TENANT="${{ github.event.inputs.tenant }}"
+        GROUPS="${{ github.event.inputs.groups }}"
+        if [ -n "$GROUPS" ]; then
+          python3 scripts/rotate_cloud.py --tenant "$TENANT" $(echo "$GROUPS" | tr ',' ' ' | sed 's/^/--group /')
+        else
+          python3 scripts/rotate_cloud.py --tenant "$TENANT"
+        fi
+
+    - name: Run Script B (sync to DC1/DC2 + trigger Ansible)
+      id: script_b
+      env:
+        VAULT_ADDR_CLOUD: ${{ secrets.VAULT_ADDR_CLOUD }}
+        VAULT_ROLE_ID_CLOUD: ${{ secrets.VAULT_ROLE_ID_CLOUD }}
+        VAULT_SECRET_ID_CLOUD: ${{ secrets.VAULT_SECRET_ID_CLOUD }}
+        VAULT_ADDR_DC1: ${{ secrets.VAULT_ADDR_DC1 }}
+        VAULT_ROLE_ID_DC1: ${{ secrets.VAULT_ROLE_ID_DC1 }}
+        VAULT_SECRET_ID_DC1: ${{ secrets.VAULT_SECRET_ID_DC1 }}
+        VAULT_ADDR_DC2: ${{ secrets.VAULT_ADDR_DC2 }}
+        VAULT_ROLE_ID_DC2: ${{ secrets.VAULT_ROLE_ID_DC2 }}
+        VAULT_SECRET_ID_DC2: ${{ secrets.VAULT_SECRET_ID_DC2 }}
+        ANSIBLE_TOKEN: ${{ secrets.ANSIBLE_TOKEN }}
+      run: |
+        TENANT="${{ github.event.inputs.tenant }}"
+        python3 scripts/sync_and_trigger_ansible.py \
+          --tenant "$TENANT" \
+          --ansible-url "https://ansible.example.com/api/rotation" \
+          --ansible-token "$ANSIBLE_TOKEN" > script_b_output.json
+        JOB_ID=$(jq -r '.ansible_job_id' script_b_output.json)
+        echo "job_id=$JOB_ID" >> $GITHUB_OUTPUT
+
+    - name: Run Script C (monitor + commit/rollback)
+      env:
+        VAULT_ADDR_CLOUD: ${{ secrets.VAULT_ADDR_CLOUD }}
+        VAULT_ROLE_ID_CLOUD: ${{ secrets.VAULT_ROLE_ID_CLOUD }}
+        VAULT_SECRET_ID_CLOUD: ${{ secrets.VAULT_SECRET_ID_CLOUD }}
+        VAULT_ADDR_DC1: ${{ secrets.VAULT_ADDR_DC1 }}
+        VAULT_ROLE_ID_DC1: ${{ secrets.VAULT_ROLE_ID_DC1 }}
+        VAULT_SECRET_ID_DC1: ${{ secrets.VAULT_SECRET_ID_DC1 }}
+        VAULT_ADDR_DC2: ${{ secrets.VAULT_ADDR_DC2 }}
+        VAULT_ROLE_ID_DC2: ${{ secrets.VAULT_ROLE_ID_DC2 }}
+        VAULT_SECRET_ID_DC2: ${{ secrets.VAULT_SECRET_ID_DC2 }}
+        ANSIBLE_TOKEN: ${{ secrets.ANSIBLE_TOKEN }}
+      run: |
+        TENANT="${{ github.event.inputs.tenant }}"
+        JOB_ID="${{ steps.script_b.outputs.job_id }}"
+        python3 scripts/monitor_ansible_and_finalize.py \
+          --tenant "$TENANT" \
+          --ansible-url "https://ansible.example.com/api" \
+          --ansible-token "$ANSIBLE_TOKEN" \
+          --job-id "$JOB_ID"

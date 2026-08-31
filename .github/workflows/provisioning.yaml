@@ -1,0 +1,75 @@
+name: Vault Provisioning on Inventory Change
+
+on:
+  push:
+    paths:
+      - "inventory/**"
+  pull_request:
+    paths:
+      - "inventory/**"
+
+jobs:
+  provision:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Detect tenant from changed files
+      id: tenant
+      run: |
+        FILE=$(git diff --name-only HEAD~1 HEAD | grep "^inventory/.*/devices.csv" | head -n 1 || true)
+        if [ -z "$FILE" ]; then
+          echo "tenant=" >> $GITHUB_OUTPUT
+          exit 0
+        fi
+        TENANT=$(echo "$FILE" | cut -d'/' -f2 | tr '[:upper:]' '[:lower:]')
+        echo "tenant=$TENANT" >> $GITHUB_OUTPUT
+
+    - name: Stop if no tenant detected
+      if: steps.tenant.outputs.tenant == ''
+      run: echo "No tenant found, skipping workflow."
+
+    - name: Install Python dependencies
+      if: steps.tenant.outputs.tenant != ''
+      run: |
+        python3 -m pip install --upgrade pip
+        python3 -m pip install hvac requests
+
+    - name: Run provisioning (dry-run on PR)
+      if: github.event_name == 'pull_request' && steps.tenant.outputs.tenant != ''
+      env:
+        VAULT_ADDR_CLOUD: ${{ secrets.VAULT_ADDR_CLOUD }}
+        VAULT_ROLE_ID_CLOUD: ${{ secrets.VAULT_ROLE_ID_CLOUD }}
+        VAULT_SECRET_ID_CLOUD: ${{ secrets.VAULT_SECRET_ID_CLOUD }}
+        VAULT_ADDR_DC1: ${{ secrets.VAULT_ADDR_DC1 }}
+        VAULT_ROLE_ID_DC1: ${{ secrets.VAULT_ROLE_ID_DC1 }}
+        VAULT_SECRET_ID_DC1: ${{ secrets.VAULT_SECRET_ID_DC1 }}
+        VAULT_ADDR_DC2: ${{ secrets.VAULT_ADDR_DC2 }}
+        VAULT_ROLE_ID_DC2: ${{ secrets.VAULT_ROLE_ID_DC2 }}
+        VAULT_SECRET_ID_DC2: ${{ secrets.VAULT_SECRET_ID_DC2 }}
+      run: |
+        python3 scripts/provision_secrets.py \
+          --tenant "${{ steps.tenant.outputs.tenant }}" \
+          --dry-run \
+          --ansible-url "https://ansible.example.com/api/new-devices" \
+          --ansible-token "${{ secrets.ANSIBLE_TOKEN }}"
+
+    - name: Run provisioning (full on push)
+      if: github.event_name == 'push' && steps.tenant.outputs.tenant != ''
+      env:
+        VAULT_ADDR_CLOUD: ${{ secrets.VAULT_ADDR_CLOUD }}
+        VAULT_ROLE_ID_CLOUD: ${{ secrets.VAULT_ROLE_ID_CLOUD }}
+        VAULT_SECRET_ID_CLOUD: ${{ secrets.VAULT_SECRET_ID_CLOUD }}
+        VAULT_ADDR_DC1: ${{ secrets.VAULT_ADDR_DC1 }}
+        VAULT_ROLE_ID_DC1: ${{ secrets.VAULT_ROLE_ID_DC1 }}
+        VAULT_SECRET_ID_DC1: ${{ secrets.VAULT_SECRET_ID_DC1 }}
+        VAULT_ADDR_DC2: ${{ secrets.VAULT_ADDR_DC2 }}
+        VAULT_ROLE_ID_DC2: ${{ secrets.VAULT_ROLE_ID_DC2 }}
+        VAULT_SECRET_ID_DC2: ${{ secrets.VAULT_SECRET_ID_DC2 }}
+      run: |
+        python3 scripts/provision_secrets.py \
+          --tenant "${{ steps.tenant.outputs.tenant }}" \
+          --ansible-url "https://ansible.example.com/api/new-devices" \
+          --ansible-token "${{ secrets.ANSIBLE_TOKEN }}"

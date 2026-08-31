@@ -19,7 +19,7 @@
             document.getElementById('page-size-custom').classList.add('hidden');
             htmx.ajax(
               'GET',
-              '/ui/groups?page={{ page }}&page_size=' + this.value +
+              '/ui/devices?page={{ page }}&page_size=' + this.value +
               '&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}',
               { target: '#devices-table', swap: 'innerHTML' }
             );
@@ -52,7 +52,7 @@
     <div class="flex items-center gap-3">
       {% if page > 1 %}
         <button
-          hx-get="/ui/groups?page={{ page - 1 }}&page_size={{ page_size }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}"
+          hx-get="/ui/devices?page={{ page - 1 }}&page_size={{ page_size }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}"
           hx-target="#devices-table"
           hx-swap="innerHTML"
           class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
@@ -67,7 +67,7 @@
 
       {% if page * page_size < total %}
         <button
-          hx-get="/ui/groups?page={{ page + 1 }}&page_size={{ page_size }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}"
+          hx-get="/ui/devices?page={{ page + 1 }}&page_size={{ page_size }}&sort_by={{ sort_by }}&sort_dir={{ sort_dir }}"
           hx-target="#devices-table"
           hx-swap="innerHTML"
           class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300"
@@ -85,28 +85,67 @@
 <!-- TABLE -->
 <div class="w-full px-4">
 <div class="border rounded bg-white p-4">
+<!-- <div class="overflow-auto max-h-[75vh]"> -->
 <div class="overflow-auto max-h-[75vh] relative">
 
+
 <table class="min-w-full border-collapse table-fixed">
+  <!-- <table class="min-w-full border-collapse table-fixed w-full block"> -->
 
   <thead class="bg-gray-100 border-b sticky top-0 z-[60] shadow-sm">
     <tr>
 
-      <!-- Group -->
+      <!-- Device -->
       <th class="px-3 py-2 text-left">
         <a hx-get="/ui/devices?page={{ page }}&page_size={{ page_size }}&sort_by=name&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
            hx-target="#devices-table"
            hx-swap="innerHTML"
            class="hover:underline cursor-pointer">
-          Group
+          Device
           {% if sort_by == "name" %}
             {{ '↑' if sort_dir == 'asc' else '↓' }}
           {% endif %}
         </a>
       </th>
 
-      <!-- Device List -->
-      <th class="px-3 py-2 text-left">Devices</th>
+      <!-- IP -->
+      <th class="px-3 py-2 text-left">
+        <a hx-get="/ui/devices?page={{ page }}&page_size={{ page_size }}&sort_by=ip&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
+           hx-target="#devices-table"
+           hx-swap="innerHTML"
+           class="hover:underline cursor-pointer">
+          IP
+          {% if sort_by == "ip" %}
+            {{ '↑' if sort_dir == 'asc' else '↓' }}
+          {% endif %}
+        </a>
+      </th>
+
+      <!-- OS -->
+      <th class="px-3 py-2 text-left">
+        <a hx-get="/ui/devices?page={{ page }}&page_size={{ page_size }}&sort_by=os&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
+           hx-target="#devices-table"
+           hx-swap="innerHTML"
+           class="hover:underline cursor-pointer">
+          OS
+          {% if sort_by == "os" %}
+            {{ '↑' if sort_dir == 'asc' else '↓' }}
+          {% endif %}
+        </a>
+      </th>
+
+      <!-- Location -->
+      <th class="px-3 py-2 text-left">
+        <a hx-get="/ui/devices?page={{ page }}&page_size={{ page_size }}&sort_by=location&sort_dir={{ 'asc' if sort_dir=='desc' else 'desc' }}"
+           hx-target="#devices-table"
+           hx-swap="innerHTML"
+           class="hover:underline cursor-pointer">
+          Location
+          {% if sort_by == "location" %}
+            {{ '↑' if sort_dir == 'asc' else '↓' }}
+          {% endif %}
+        </a>
+      </th>
 
       <!-- Breakglass -->
       <th class="px-3 py-2 text-left">Breakglass Account</th>
@@ -118,70 +157,57 @@
   </thead>
 
   <tbody>
-    {% for g in groups %}
+    {% for d in devices %}
     <tr class="border-b hover:bg-gray-50">
 
-      <!-- Group Name -->
-      <td class="px-3 py-2 font-semibold">{{ g.name }}</td>
+      <td class="px-3 py-2">{{ d.name }}</td>
+      <td class="px-3 py-2">{{ d.ip }}</td>
+      <td class="px-3 py-2">{{ d.os }}</td>
+      <td class="px-3 py-2">{{ d.location }}</td>
 
-      <!-- Device List -->
       <td class="px-3 py-2">
-        {% if g.device_list %}
-          <ul class="list-disc ml-4 text-sm">
-            {% for dev in g.device_list %}
-              <li>{{ dev }}</li>
-            {% endfor %}
-          </ul>
-        {% else %}
-          <span class="text-gray-500">No devices</span>
-        {% endif %}
-      </td>
-
-      <!-- Breakglass Username -->
-      <td class="px-3 py-2">
-        {% if g.username %}
-          {{ g.username }}
+        {% if d.username %}
+          {{ d.username }}
         {% else %}
           <span class="text-gray-500">None</span>
         {% endif %}
       </td>
 
-      <!-- Action Column -->
       <td class="px-3 py-2">
 
-        {% if g.request and g.request.status in ["pending", "approved"] %}
+        {% if d.request and d.request.status in ["pending", "approved"] %}
 
-          {% if g.request.status == "pending" %}
+          {% if d.request.status == "pending" %}
             <span class="text-yellow-700 bg-yellow-100 px-2 py-1 rounded text-xs">
               Pending Approval
             </span>
             <p class="text-xs text-gray-600 mb-2">
-              pending until {{ g.request.end_time }}
+              pending until {{ d.request.end_time }}
             </p>
 
-          {% elif g.request.status == "approved" %}
-            <div id="pwbox-{{ g.request.id }}">
+          {% elif d.request.status == "approved" %}
+            <div id="pwbox-{{ d.request.id }}">
               <span class="text-green-700 bg-green-100 px-2 py-1 rounded text-xs">
                 Approved
               </span>
               <span class="text-xs text-gray-600 mb-2">
-                by {{ g.request.approver_username }}
+                by {{ d.request.approver_username }}
               </span>
               <p class="text-xs text-gray-600 mb-2">
-                Active until {{ g.request.end_time }}
+                Active until {{ d.request.end_time }}
               </p>
             </div>
 
             <button
               class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700 mr-2"
               type="button"
-              onclick="copyBreakglassPassword({{ g.request.id }})">
+              onclick="copyBreakglassPassword({{ d.request.id }})">
               Copy Password
             </button>
 
             <button
               class="bg-gray-700 text-white px-3 py-1 rounded hover:bg-gray-800"
-              hx-get="/ui/requests/{{ g.request.id }}/show-password"
+              hx-get="/ui/requests/{{ d.request.id }}/show-password"
               hx-target="#modal"
               hx-swap="innerHTML">
               Show Password
@@ -194,7 +220,7 @@
           {% if current_user.role in ["requester", "requester_approver"] %}
             <button
               class="bg-blue-600 text-white px-3 py-1 rounded hover:bg-blue-700"
-              hx-get="/ui/requests/create-modal/{{ g.name }}"
+              hx-get="/ui/requests/create-modal/{{ d.name }}"
               hx-target="#modal"
               hx-swap="innerHTML">
               Request Access
