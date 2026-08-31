@@ -10,6 +10,7 @@ import json
 import requests
 from email.mime.text import MIMEText
 
+
 # ============================================================
 # GENERATORS
 # ============================================================
